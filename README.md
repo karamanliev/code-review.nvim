@@ -8,6 +8,8 @@ Dead simple code reviews in Neovim designed for AI pair programming.
 
 Add comments to any line or code block, export as structured Markdown, and paste to Claude, ChatGPT, or any AI assistant. They'll understand exactly what needs fixing.
 
+> **Note**: This is a fork of [choplin/code-review.nvim](https://github.com/choplin/code-review.nvim) adapted for an OpenChamber-style review workflow: a single canonical OpenChamber-compatible output format, first-class [Snacks.nvim](https://github.com/folke/snacks.nvim) picker support with layout passthrough, Enter/Shift+Enter comment input, a guaranteed native quickfix list on `<leader>rq`, and `single` borders by default.
+
 ## 📸 Screenshots
 
 <table>
@@ -35,32 +37,40 @@ Add comments to any line or code block, export as structured Markdown, and paste
 
 ## ✨ Features
 
-- 🎯 **Instant feedback** - Comment on any line or code block with `<leader>rc`
+- 🎯 **Instant feedback** - Comment on any line or code block with `<leader>ra`
 - 📝 **Rich formatting** - Write proper reviews with Markdown support
-- 🤖 **AI-ready export** - Share reviews with Claude, ChatGPT in one copy
+- 🤖 **AI-ready export** - OpenChamber-compatible review format on one copy
 - 👁️ **Smart navigation** - Jump between comments, view at cursor
 - ✏️ **Live preview** - See and edit all your comments in one place
-- 🔍 **Find comments** - List all with `<leader>rl` using Telescope, fzf, or quickfix
+- 🔍 **Find comments** - List all with `<leader>rl` using Snacks, Telescope, fzf-lua, or quickfix
+- 📋 **Guaranteed quickfix** - `<leader>rq` always opens the native quickfix list
 - 💬 **Thread discussions** - Reply to comments and resolve threads
 
 ## 📦 Installation
 
 ### Using [lazy.nvim](https://github.com/folke/lazy.nvim)
 
+With Snacks installed, this is all you need:
+
 ```lua
 {
-  'choplin/code-review.nvim',
-  config = function()
-    require('code-review').setup()
-  end,
+  'karamanliev/code-review.nvim',
+  dependencies = {
+    'folke/snacks.nvim',
+  },
+  opts = {},
 }
 ```
+
+<br>
+
+Without any picker dependency the plugin falls back to the native quickfix list.
 
 ### Using [packer.nvim](https://github.com/wbthomason/packer.nvim)
 
 ```lua
 use {
-  'choplin/code-review.nvim',
+  'karamanliev/code-review.nvim',
   config = function()
     require('code-review').setup()
   end,
@@ -69,10 +79,11 @@ use {
 
 ## 🚀 Quick Start
 
-1. **Add a comment**: `<leader>rc` on any line or visual selection
+1. **Add a comment**: `<leader>ra` on any line or visual selection
 
    - Write your feedback in Markdown
-   - Press `<C-CR>` to submit
+   - Press `<CR>` (Enter) to submit
+   - Press `<S-CR>` (Shift+Enter) to insert a newline
 
 2. **Preview all comments**: `<leader>rp` to see your complete review
 
@@ -93,25 +104,33 @@ require('code-review').setup({
   ui = {
     -- Comment input window
     input_window = {
-      width = 60,
-      height = 2,
+      width = 80,
+      height = 1,
       max_height = 20,  -- Auto-expand up to this height
-      border = 'rounded',
-      title = ' Add Comment (C-CR to submit) ',
+      border = 'single',
+      title = ' Add Comment ',
       title_pos = 'center',
+      -- Keybindings inside the comment input window
+      keys = {
+        submit = '<CR>',   -- Enter submits the comment
+        newline = '<S-CR>', -- Shift+Enter inserts a newline
+        cancel = '<Esc>',  -- Esc cancels (normal mode)
+      },
     },
     -- Preview window
     preview = {
       split = 'vertical', -- 'vertical', 'horizontal', or 'float'
-      vertical_width = 80,
+      vertical_width = 100,
       horizontal_height = 20,
       float = {
         width = 0.8,
         height = 0.8,
-        border = 'rounded',
+        border = 'single',
         title = ' Review Preview ',
         title_pos = 'center',
       },
+      -- Border used by floating comment/comment-list popups
+      border = 'single',
     },
     -- Sign column indicators
     signs = {
@@ -130,7 +149,6 @@ require('code-review').setup({
   output = {
     date_format = '%Y-%m-%d %H:%M:%S',
     save_dir = nil, -- nil = current directory
-    format = 'detailed', -- 'detailed' or 'minimal' (flat, for AI)
   },
   -- Comment settings
   comment = {
@@ -157,13 +175,22 @@ require('code-review').setup({
   -- Keymaps (set to false to disable all keymaps)
   keymaps = {
     clear = '<leader>rx',
-    add_comment = '<leader>rc',
+    add_comment = '<leader>ra',
     preview = '<leader>rp',
     save = '<leader>rw',
-copy = '<leader>ry',
+    copy = '<leader>ry',
     show_comment = '<leader>rs',
     list_comments = '<leader>rl',
+    quickfix = '<leader>rq',
     delete_comment = '<leader>rd',
+  },
+  -- Picker integration
+  integrations = {
+    -- 'auto', 'snacks', 'telescope', 'fzf-lua', 'quickfix', or false
+    -- 'auto' tries Snacks -> Telescope -> fzf-lua -> quickfix
+    picker = 'auto',
+    -- Layout forwarded to the picker (e.g. a Snacks layout name or table)
+    layout = 'default',
   },
 })
 ```
@@ -186,11 +213,13 @@ require('code-review').setup({
 
 -- Set up your own keymaps
 local cr = require('code-review')
-vim.keymap.set({'n', 'v'}, '<leader>rc', cr.add_comment, { desc = "Add review comment" })
+vim.keymap.set({'n', 'v'}, '<leader>ra', cr.add_comment, { desc = "Add review comment" })
 vim.keymap.set('n', '<leader>rp', cr.preview, { desc = "Preview review" })
 vim.keymap.set('n', '<leader>rw', cr.save, { desc = "Save review to file" })
 vim.keymap.set('n', '<leader>ry', cr.copy, { desc = "Copy review to clipboard" })
 vim.keymap.set('n', '<leader>rs', cr.show_comment_at_cursor, { desc = "Show comment at cursor" })
+vim.keymap.set('n', '<leader>rl', cr.list_comments, { desc = "List all comments (configured picker)" })
+vim.keymap.set('n', '<leader>rq', cr.list_quickfix, { desc = "List all comments in quickfix" })
 vim.keymap.set('n', '<leader>rx', cr.clear, { desc = "Clear all comments" })
 ```
 
@@ -207,8 +236,8 @@ vim.api.nvim_create_autocmd('User', {
     local cr = require('code-review')
     local funcs = cr.get_input_buffer_functions(buf)
 
-    -- Submit with C-CR in both insert and normal mode
-    vim.keymap.set({'i', 'n'}, '<C-CR>', funcs.submit, { buffer = buf })
+    -- Submit with Enter in both insert and normal mode
+    vim.keymap.set({'i', 'n'}, '<CR>', funcs.submit, { buffer = buf })
     -- Cancel with Esc or q in normal mode
     vim.keymap.set('n', '<Esc>', funcs.cancel, { buffer = buf })
     vim.keymap.set('n', 'q', funcs.cancel, { buffer = buf })
@@ -269,9 +298,10 @@ end
 
 | Command                      | Default Keymap | Description                                                 |
 | ---------------------------- | -------------- | ----------------------------------------------------------- |
-| `:CodeReviewComment [lines]` | `<leader>rc`   | Add comment at cursor/selection with optional context lines |
+| `:CodeReviewComment [lines]` | `<leader>ra`   | Add comment at cursor/selection with optional context lines |
 | `:CodeReviewShowComment`     | `<leader>rs`   | Show comments at cursor position                            |
-| `:CodeReviewList`            | `<leader>rl`   | List all comments (Telescope/fzf-lua/quickfix)              |
+| `:CodeReviewList`            | `<leader>rl`   | List all comments (Snacks/Telescope/fzf-lua/quickfix)       |
+| `:CodeReviewQuickfix`        | `<leader>rq`   | List all comments in the native quickfix window (always)    |
 | `:CodeReviewPreview`         | `<leader>rp`   | Open preview window with editable content                   |
 | `:CodeReviewSave [path]`     | `<leader>rw`   | Save review to file                                         |
 | `:CodeReviewCopy`            | `<leader>ry`   | Copy review to clipboard                                    |
@@ -293,7 +323,8 @@ end
 | --------------------------------------------------- | --------------------------------------- |
 | `require('code-review').add_comment(lines)`         | Add comment with optional context lines |
 | `require('code-review').show_comment_at_cursor()`   | Show comments at cursor                 |
-| `require('code-review').list_comments()`            | List all comments                       |
+| `require('code-review').list_comments()`            | List all comments (configured picker)   |
+| `require('code-review').list_quickfix()`            | List all comments in quickfix (always)  |
 | `require('code-review').preview()`                  | Open preview window                     |
 | `require('code-review').save(path)`                 | Save to file                            |
 | `require('code-review').copy()`                     | Copy to clipboard                       |
@@ -304,7 +335,7 @@ end
 
 1. Enter visual mode: `v` or `V`
 2. Select the code range
-3. Press `<leader>rc` to add a comment to the selection
+3. Press `<leader>ra` to add a comment to the selection
 
 ### Editing Reviews
 
@@ -321,7 +352,7 @@ The preview buffer is fully editable. You can:
 Comments automatically create discussion threads. You can:
 
 - **Reply to comments**: Use `<leader>rr` to reply to existing comments
-- **Create new threads**: Use `<leader>rc` to start a new thread on the same line
+- **Create new threads**: Use `<leader>ra` to start a new thread on the same line
 - **Resolve threads**: Use `<leader>ro` to mark a thread as resolved
 - Thread status is displayed in the comment list:
   - `[!]` Action Required - awaiting response from code author (Claude Code)
@@ -342,24 +373,69 @@ This enables efficient workflow between AI assistants and human reviewers.
 
 <img src="assets/screenshot/picker.png" alt="Comment List Picker" />
 
-The `:CodeReviewList` command (`<leader>rl`) automatically selects the best available picker:
+The `:CodeReviewList` command (`<leader>rl`) uses the picker configured with `integrations.picker`:
 
-1. **[Telescope](https://github.com/nvim-telescope/telescope.nvim)** (if installed)
+- **`'auto'`** (default): tries **Snacks** -> **Telescope** -> **fzf-lua** -> quickfix
+- **`'snacks'`, `'telescope'`, `'fzf-lua'`**: use that picker, fall back to quickfix if it is unavailable
+- **`'quickfix'` or `false`**: always use the native quickfix list
 
-   - Fuzzy search through comments
-   - Live preview with syntax highlighting
-   - Navigate with `j`/`k`, select with `<Enter>`
+`<leader>rq` (`:CodeReviewQuickfix`) always opens the thread list in the native quickfix window, regardless of the picker configuration.
 
-2. **[fzf-lua](https://github.com/ibhagwan/fzf-lua)** (if installed)
+### Snacks integration
 
-   - Fast fuzzy search
-   - Full comment preview with Markdown highlighting
-   - Navigate with `Ctrl-j`/`Ctrl-k`, select with `<Enter>`
+With [Snacks.nvim](https://github.com/folke/snacks.nvim) installed, comments are listed with a first-class
+`Snacks.picker`: compact rows show `file:line-range` plus the first comment line, fuzzy search covers
+filepaths, line ranges, and full comment text, and the source file is previewed positioned at the
+commented range. Pressing `<Enter>` jumps to the comment.
 
-3. **Quickfix** (fallback)
-   - Native Vim list
-   - `:cn`/`:cp` to navigate
-   - `<Enter>` to jump to comment location
+The layout can be selected per integration and is forwarded to Snacks unchanged, so any Snacks
+layout name or full layout table works:
+
+```lua
+require('code-review').setup({
+  integrations = {
+    picker = 'snacks',
+    snacks = {
+      layout = 'vertical',
+    },
+  },
+})
+```
+
+```lua
+require('code-review').setup({
+  integrations = {
+    picker = 'snacks',
+    snacks = {
+      layout = 'vscode',
+    },
+  },
+})
+```
+
+```lua
+require('code-review').setup({
+  integrations = {
+    picker = 'snacks',
+    snacks = {
+      layout = 'default',
+    },
+  },
+})
+```
+
+A global default can be set with `integrations.layout`; the per-picker `integrations.snacks.layout`
+overrides it. New Snacks layouts keep working automatically since the value is forwarded untouched.
+
+### Telescope and fzf-lua
+
+- **[Telescope](https://github.com/nvim-telescope/telescope.nvim)**: fuzzy search, live preview with syntax highlighting, `<Enter>` to jump
+- **[fzf-lua](https://github.com/ibhagwan/fzf-lua)**: fast fuzzy search, full comment preview with Markdown highlighting, `<Enter>` to jump
+
+### Quickfix fallback
+
+Quickfix is always available: it is the fallback when no picker is installed or the configured picker
+is unavailable, and it can always be opened explicitly with `:CodeReviewQuickfix` / `<leader>rq`.
 
 ### Side-by-side Review with diffview.nvim
 
@@ -373,41 +449,49 @@ Perfect for PR reviews! Use code-review.nvim alongside [diffview.nvim](https://g
 
 ## 📄 Output Format
 
-Two output formats are available via `output.format` setting:
+This fork uses a single canonical OpenChamber-compatible format for everything: clipboard copies,
+saved review files, the editable preview, and picker detail previews all render identically.
 
-### Detailed Format (Default)
-
-Full format with code context, timestamps, and headers:
+Every comment renders as:
 
 ````markdown
-# Code Review
+Comment on `src/app/example.ts` lines 16-20 (modified):
 
-**Date**: 2024-01-30 14:30:00
-**Total Comments**: 2
-
-## src/main.lua
-
-### Line 42
-
-**Time**: 2024-01-30 14:30:00
-
-```lua
-42: local function process_data(input)
+```typescript
+const foo = {
+  bar: true,
+}
 ```
 
-This function needs error handling for nil input.
+This needs to use the existing helper instead.
 ````
 
-### Minimal Format
+Rules of the format:
 
-Flat format optimized for AI assistants (reduces token usage):
+- The filepath is always wrapped in Markdown backticks and rendered relative to the Git root when possible (absolute path as fallback for files outside a repo).
+- The range is always rendered as `lines START-END`; a single-line comment becomes `lines 42-42`.
+- `(modified)` is appended only when Git reports the file as changed (staged, unstaged, or untracked). Clean files and files outside Git get no suffix.
+- The selected/source context is rendered verbatim in a fenced code block; the code-fence language is inferred from the filename (with Neovim names like `typescriptreact` mapped to `typescript`).
+- Comment text is preserved exactly, including blank lines.
+- Comment blocks are separated by exactly one blank line.
 
+A comment on a clean file:
+
+````markdown
+Comment on `src/app/example.ts` lines 16-20:
+
+```typescript
+const foo = {
+  bar: true,
+}
 ```
-src/main.lua:L42: This function needs error handling for nil input.
-src/main.lua:L100-105: Consider using table.filter for better readability.
-```
 
-With visual selection, column information is included: `file.lua:L42:10-45:20: comment`
+Looks good.
+````
+
+The preview buffer (`<leader>rp`) uses this same format and stays editable: modify comment text,
+delete whole blocks, reorder blocks, and save with `:w`. Internal thread metadata (ids, timestamps,
+thread status) is matched and preserved across saves; it never leaks into the exported text.
 
 ## 💾 Storage Backends
 

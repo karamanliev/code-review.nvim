@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Native [Snacks.nvim](https://github.com/folke/snacks.nvim) picker integration for comments and threads
+- `integrations.picker` dispatch that honors `auto`, `snacks`, `telescope`, `fzf-lua`, `quickfix`, and `false` with graceful fallbacks
+- Picker layout passthrough via `integrations.layout` and `integrations.<picker>.layout`
+- `:CodeReviewQuickfix` command, `list_quickfix()` API, and `<leader>rq` keymap that always open the native quickfix list
+- Configurable comment-input keybindings via `ui.input_window.keys` (`submit`/`newline`/`cancel`)
+- Git-aware `(modified)` marker in review output, cached per formatting pass
+- `code-review.git` helper module with per-operation status caching
+- Formatter metadata reconciliation to preserve thread ids/authors/timestamps across preview edits
+
+### Changed
+- The canonical output format is now the OpenChamber-compatible `Comment on \`file\` lines S-E:` style used for clipboard, saved files, the editable preview, and picker detail previews
+- Default add-comment keymap changed from `<leader>rc` to `<leader>ra`
+- Default input-window keys: `<CR>` submits, `<S-CR>` inserts a newline, `<Esc>` cancels
+- Floating window borders default to `single`
+- Parser rewritten for the canonical format (legacy detailed parsing removed)
+
+### Removed
+- `output.format` option and the `detailed`/`minimal` output formats (superseded by the canonical OpenChamber format)
+
 ## [0.6.0] - 2025-12-12
 
 ### Added
