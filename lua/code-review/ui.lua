@@ -63,13 +63,21 @@ function M.get_input(opts)
     end
   end
 
-  -- Buffer-local keymaps
-  vim.keymap.set("n", "<CR>", submit, { buffer = buf, nowait = true })
-  vim.keymap.set("n", "<C-CR>", submit, { buffer = buf, nowait = true })
+  -- Buffer-local keymaps (configurable via ui.input_window.keys)
+  local keys = conf.keys or {}
+  local submit_key = keys.submit or "<CR>"
+  local newline_key = keys.newline or "<S-CR>"
+  local cancel_key = keys.cancel or "<Esc>"
+
+  local function insert_newline()
+    vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
+  end
+
+  vim.keymap.set("n", submit_key, submit, { buffer = buf, nowait = true })
   vim.keymap.set("n", "q", cancel, { buffer = buf, nowait = true })
-  vim.keymap.set("n", "<Esc>", cancel, { buffer = buf, nowait = true })
-  vim.keymap.set("i", "<C-CR>", submit, { buffer = buf, nowait = true })
-  vim.keymap.set("i", "<C-c>", cancel, { buffer = buf, nowait = true })
+  vim.keymap.set("n", cancel_key, cancel, { buffer = buf, nowait = true })
+  vim.keymap.set("i", submit_key, submit, { buffer = buf, nowait = true })
+  vim.keymap.set("i", newline_key, insert_newline, { buffer = buf, nowait = true })
 
   -- Start in insert mode
   vim.cmd("startinsert")
@@ -196,13 +204,22 @@ function M.show_comment_input(callback, context, title)
     callback(nil)
   end
 
+  -- Forward declaration so the newline keymap can trigger a height refresh
+  local adjust_window_height
+
+  -- Keybindings inside the input window (configurable via ui.input_window.keys)
+  local keys = conf.keys or {}
+  local submit_key = keys.submit or "<CR>"
+  local newline_key = keys.newline or "<S-CR>"
+  local cancel_key = keys.cancel or "<Esc>"
+
   -- Normal mode mappings
-  vim.api.nvim_buf_set_keymap(buf, "n", "<C-CR>", "", {
+  vim.api.nvim_buf_set_keymap(buf, "n", submit_key, "", {
     noremap = true,
     callback = close_with_text,
   })
 
-  vim.api.nvim_buf_set_keymap(buf, "n", "<Esc>", "", {
+  vim.api.nvim_buf_set_keymap(buf, "n", cancel_key, "", {
     noremap = true,
     callback = close_cancelled,
   })
@@ -212,14 +229,26 @@ function M.show_comment_input(callback, context, title)
     callback = close_cancelled,
   })
 
-  -- Insert mode mappings
-  vim.api.nvim_buf_set_keymap(buf, "i", "<C-CR>", "", {
+  -- Insert mode mappings: submit key submits, newline key inserts a newline
+  vim.api.nvim_buf_set_keymap(buf, "i", submit_key, "", {
     noremap = true,
     callback = close_with_text,
   })
 
+  vim.api.nvim_buf_set_keymap(buf, "i", newline_key, "", {
+    noremap = true,
+    callback = function()
+      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
+      vim.schedule(function()
+        if adjust_window_height then
+          adjust_window_height()
+        end
+      end)
+    end,
+  })
+
   -- Function to adjust window height based on content
-  local function adjust_window_height()
+  function adjust_window_height()
     if not vim.api.nvim_win_is_valid(win) then
       return
     end
@@ -261,15 +290,6 @@ function M.show_comment_input(callback, context, title)
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "InsertEnter", "InsertLeave" }, {
     buffer = buf,
     callback = adjust_window_height,
-  })
-
-  -- Also trigger on cursor movement in insert mode to catch new lines immediately
-  vim.api.nvim_buf_set_keymap(buf, "i", "<CR>", "", {
-    noremap = true,
-    callback = function()
-      vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
-      vim.schedule(adjust_window_height)
-    end,
   })
 
   -- Initial adjustment
@@ -376,8 +396,10 @@ function M.handle_preview_save(bufnr)
     return
   end
 
-  -- Update state
+  -- Preserve internal metadata (ids, timestamps, thread fields) by matching
+  -- parsed blocks against the existing comments
   local state = require("code-review.state")
+  comments = formatter.reconcile(comments, state.get_comments())
   state.replace_comments(comments)
 
   vim.notify("Reviews updated from preview")
@@ -475,7 +497,7 @@ function M.show_comment_list(comments)
     width = width,
     height = height,
     style = "minimal",
-    border = "rounded",
+    border = config.get("ui.preview.border") or "single",
     title = " Review Comments ",
     title_pos = "center",
   })

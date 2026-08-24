@@ -55,6 +55,10 @@ function M.setup(opts)
     M.list_comments()
   end, { desc = "List all comments" })
 
+  vim.api.nvim_create_user_command("CodeReviewQuickfix", function()
+    M.list_quickfix()
+  end, { desc = "List all comments in the native quickfix window" })
+
   vim.api.nvim_create_user_command("CodeReviewDeleteComment", function()
     M.delete_comment_at_cursor()
   end, { desc = "Delete comment at cursor position" })
@@ -105,6 +109,7 @@ function M.setup(opts)
             copy = "Copy review to clipboard",
             show_comment = "Show comment at cursor",
             list_comments = "List all comments",
+            quickfix = "List all comments in quickfix",
             delete_comment = "Delete comment at cursor",
             reply_comment = "Reply to comment at cursor",
             resolve_thread = "Resolve thread at cursor",
@@ -120,6 +125,7 @@ function M.setup(opts)
             copy = M.copy,
             show_comment = M.show_comment_at_cursor,
             list_comments = M.list_comments,
+            quickfix = M.list_quickfix,
             delete_comment = M.delete_comment_at_cursor,
             reply_comment = M.reply_to_comment_at_cursor,
             resolve_thread = M.resolve_thread_at_cursor,
@@ -305,6 +311,12 @@ function M.list_comments()
   require("code-review.list").list_threads()
 end
 
+--- List all comments in the native quickfix window, regardless of picker
+--- configuration
+function M.list_quickfix()
+  require("code-review.list").list_threads_quickfix()
+end
+
 --- Reply to comment at cursor position
 function M.reply_to_comment_at_cursor()
   local bufnr = vim.api.nvim_get_current_buf()
@@ -356,7 +368,7 @@ function M.reply_to_comment_at_cursor()
       line_start = comment_to_reply.line_start,
       line_end = comment_to_reply.line_end,
       lines = comment_to_reply.context_lines or {},
-    }, " Reply to Comment (C-CR to submit) ")
+    }, " Reply to Comment ")
   else
     -- Create thread selection items
     local thread_items = {}
@@ -401,7 +413,7 @@ function M.reply_to_comment_at_cursor()
         line_start = comment_to_reply.line_start,
         line_end = comment_to_reply.line_end,
         lines = comment_to_reply.context_lines or {},
-      }, " Reply to Comment (C-CR to submit) ")
+      }, " Reply to Comment ")
     end)
   end
 end

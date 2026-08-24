@@ -9,9 +9,15 @@ local defaults = {
       width = 80,
       height = 1,
       max_height = 20, -- Maximum height when content requires scrolling
-      border = "rounded",
-      title = " Add Comment (C-CR to submit) ",
+      border = "single",
+      title = " Add Comment ",
       title_pos = "center",
+      -- Keybindings inside the comment input window
+      keys = {
+        submit = "<CR>",
+        newline = "<S-CR>",
+        cancel = "<Esc>",
+      },
     },
     -- Preview window settings
     preview = {
@@ -21,10 +27,12 @@ local defaults = {
       float = {
         width = 0.85,
         height = 0.8,
-        border = "rounded",
+        border = "single",
         title = " Review Preview ",
         title_pos = "center",
       },
+      -- Border used by floating comment/comment-list popups
+      border = "single",
     },
     -- Sign column indicators
     signs = {
@@ -46,8 +54,6 @@ local defaults = {
     date_format = "%Y-%m-%d %H:%M:%S",
     -- Default save directory (nil means current directory)
     save_dir = nil,
-    -- Output format: "detailed" (full markdown) or "minimal" (flat, for AI)
-    format = "detailed",
   },
   -- Comment settings
   comment = {
@@ -87,7 +93,7 @@ local defaults = {
     -- Add comment at cursor/selection
     add_comment = {
       mode = { "n", "v" },
-      key = "<leader>rc",
+      key = "<leader>ra",
     },
     -- Preview review
     preview = {
@@ -114,6 +120,11 @@ local defaults = {
       mode = "n",
       key = "<leader>rl",
     },
+    -- List all comments in the native quickfix window
+    quickfix = {
+      mode = "n",
+      key = "<leader>rq",
+    },
     -- Delete comment at cursor
     delete_comment = {
       mode = "n",
@@ -132,8 +143,11 @@ local defaults = {
   },
   -- Integration settings
   integrations = {
-    -- Automatically detect and use available pickers
-    picker = "auto", -- 'auto', 'telescope', 'fzf-lua', 'snacks', false
+    -- Picker selection: 'auto', 'snacks', 'telescope', 'fzf-lua', 'quickfix', false
+    picker = "auto",
+    -- Layout forwarded to the configured picker (name or full layout table).
+    -- Can be overridden per picker, e.g. `integrations.snacks.layout`.
+    layout = "default",
   },
 }
 
@@ -150,13 +164,6 @@ end
 ---@param opts table User configuration
 function M.setup(opts)
   config = merge_config(opts)
-
-  -- Validate output.format
-  local valid_formats = { detailed = true, minimal = true }
-  local format = config.output and config.output.format
-  if format and not valid_formats[format] then
-    error(string.format("Invalid output.format: '%s'. Must be 'detailed' or 'minimal'", format))
-  end
 
   -- Create highlight groups
   vim.api.nvim_set_hl(0, "CodeReviewSign", { link = "Comment", default = true })
