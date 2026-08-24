@@ -356,7 +356,7 @@ T["snacks thread list keeps thread semantics"] = function()
   -- First thread should carry the thread info and count replies
   local first = captured.opts.items[1]
   MiniTest.expect.equality(first.thread ~= nil, true)
-  MiniTest.expect.match(first.display, "2 comments")
+  MiniTest.expect.equality(first.comment_count, 2)
 end
 
 return T
