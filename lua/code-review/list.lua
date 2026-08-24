@@ -419,14 +419,46 @@ local function comment_to_snacks_item(comment, thread)
     text = string.format("%s %s %s", comment.file, line_info, comment.comment),
     comment = comment,
     thread = thread,
-    display = string.format("%s:%s  %s", comment.file, line_info, preview_text),
+    line_info = line_info,
+    preview_text = preview_text,
   }
+end
+
+--- Format a Snacks list row like a regular Snacks file entry:
+--- icon + path + line (via Snacks' own filename formatter), then range end
+--- and the comment text.
+---@param status_icon boolean? Whether status icons are available on items
+local function snacks_format_row(status_icon)
+  return function(item, picker)
+    ---@type table[]
+    local ret = {}
+    if status_icon and item.status_icon and item.status_icon ~= "" then
+      ret[#ret + 1] = { item.status_icon, item.status_icon_hl or "Comment" }
+      ret[#ret + 1] = { " " }
+    end
+    -- Render icon + path + start line with Snacks' filename formatter.
+    -- A column of 0 keeps its built-in `:row` segment from adding a column.
+    local fmt_item = setmetatable({ pos = { item.pos[1], 0 } }, { __index = item })
+    vim.list_extend(ret, require("snacks").picker.format.filename(fmt_item, picker))
+    -- For a multi-line range, turn `:4 ` into `:4-8 ` by replacing the
+    -- trailing space emitted by the filename formatter
+    if item.pos and item.end_pos and item.end_pos[1] ~= item.pos[1] then
+      ret[#ret] = { "-" .. tostring(item.end_pos[1]) .. " ", "SnacksPickerRow" }
+    end
+    ret[#ret + 1] = { " " }
+    ret[#ret + 1] = { item.preview_text, "SnacksPickerComment" }
+    if item.comment_count and item.comment_count > 1 then
+      ret[#ret + 1] = { string.format(" (%d comments)", item.comment_count), "SnacksPickerSpecial" }
+    end
+    return ret
+  end
 end
 
 --- Open a Snacks picker for the given items
 ---@param items table[]
 ---@param title string
-local function open_snacks_picker(items, title)
+---@param status_icon string? unused placeholder for future icon config
+local function open_snacks_picker(items, title, status_icon)
   local ok, Snacks = pcall(require, "snacks")
   if not ok then
     return false
@@ -436,9 +468,7 @@ local function open_snacks_picker(items, title)
     title = title,
     items = items,
     layout = picker_layout("snacks"),
-    format = function(item)
-      return { { item.display, "Normal" } }
-    end,
+    format = snacks_format_row(status_icon),
     -- Source-file preview positioned at the commented range
     preview = "file",
     confirm = function(p, item)
@@ -484,7 +514,7 @@ function M.list_with_snacks()
     table.insert(items, item)
   end
 
-  return open_snacks_picker(items, "Code Review Comments")
+  return open_snacks_picker(items, "Code Review Comments", true)
 end
 
 --- List all threads using Snacks picker (thread-aware semantics)
@@ -528,24 +558,30 @@ function M.list_threads_with_snacks()
   for i, thread_info in ipairs(thread_list) do
     local root_comment = thread_info.data.root_comment
 
-    -- Status icon (match virtual text)
+    -- Status icon (match virtual text/indicators), with matching highlights
     local status_icon = ""
+    local status_icon_hl = "Comment"
     if root_comment.thread_status == "action-required" then
-      status_icon = "○ "
+      status_icon = "○"
+      status_icon_hl = "CodeReviewActionRequired"
     elseif root_comment.thread_status == "waiting-review" then
-      status_icon = "󰇮 "
+      status_icon = "󰇮"
+      status_icon_hl = "CodeReviewWaitingReview"
     elseif thread_info.status == "resolved" then
-      status_icon = "✓ "
+      status_icon = "✓"
+      status_icon_hl = "CodeReviewResolved"
     end
 
     local item = comment_to_snacks_item(root_comment, thread_info)
     item.idx = i
     item.thread = thread_info
-    item.display = string.format("%s%s (%d comments)", status_icon, item.display, #thread_info.data.replies + 1)
+    item.status_icon = status_icon
+    item.status_icon_hl = status_icon_hl
+    item.comment_count = #thread_info.data.replies + 1
     table.insert(items, item)
   end
 
-  return open_snacks_picker(items, "Code Review Threads")
+  return open_snacks_picker(items, "Code Review Threads", true)
 end
 
 --- Dispatch a listing action through the configured picker integration.
