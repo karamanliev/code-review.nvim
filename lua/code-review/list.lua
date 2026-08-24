@@ -2,6 +2,20 @@ local M = {}
 
 local state = require("code-review.state")
 local preview = require("code-review.list-preview")
+local config = require("code-review.config")
+
+--- Resolve the layout option for a picker integration.
+--- Per-picker `integrations.<picker>.layout` overrides the global
+--- `integrations.layout`. The value is forwarded to the picker unchanged.
+---@param picker_name string
+---@return any
+local function picker_layout(picker_name)
+  local per_picker = config.get("integrations." .. picker_name .. ".layout")
+  if per_picker ~= nil then
+    return per_picker
+  end
+  return config.get("integrations.layout")
+end
 
 --- Convert comment to quickfix item
 ---@param comment table
@@ -388,19 +402,214 @@ function M.list_with_fzf_lua()
   return true
 end
 
---- List all comments using available picker
+--- Build a Snacks picker item for a comment
+---@param comment table
+---@param thread table? Optional thread info
+---@return table
+local function comment_to_snacks_item(comment, thread)
+  local line_info = comment.line_start == comment.line_end and tostring(comment.line_start)
+    or string.format("%d-%d", comment.line_start, comment.line_end)
+  local preview_text = comment.comment:match("^[^\n]*") or comment.comment
+
+  return {
+    file = comment.file,
+    pos = { comment.line_start, 1 },
+    end_pos = { comment.line_end, 1 },
+    -- Search text covers the filepath, the line/range, and full comment text
+    text = string.format("%s %s %s", comment.file, line_info, comment.comment),
+    comment = comment,
+    thread = thread,
+    display = string.format("%s:%s  %s", comment.file, line_info, preview_text),
+  }
+end
+
+--- Open a Snacks picker for the given items
+---@param items table[]
+---@param title string
+local function open_snacks_picker(items, title)
+  local ok, Snacks = pcall(require, "snacks")
+  if not ok then
+    return false
+  end
+
+  Snacks.picker.pick({
+    title = title,
+    items = items,
+    layout = picker_layout("snacks"),
+    format = function(item)
+      return { { item.display, "Normal" } }
+    end,
+    -- Source-file preview positioned at the commented range
+    preview = "file",
+    confirm = function(p, item)
+      p:close()
+      if item then
+        vim.cmd("edit " .. vim.fn.fnameescape(item.file))
+        if item.pos then
+          vim.api.nvim_win_set_cursor(0, { item.pos[1], 0 })
+        end
+      end
+    end,
+  })
+
+  return true
+end
+
+--- List all comments using Snacks picker
+---@return boolean handled
+function M.list_with_snacks()
+  if not pcall(require, "snacks") then
+    return false
+  end
+
+  local comments = state.get_comments()
+
+  if #comments == 0 then
+    vim.notify("No comments to display", vim.log.levels.INFO)
+    return true
+  end
+
+  -- Sort by file and line
+  table.sort(comments, function(a, b)
+    if a.file ~= b.file then
+      return a.file < b.file
+    end
+    return a.line_start < b.line_start
+  end)
+
+  local items = {}
+  for i, comment in ipairs(comments) do
+    local item = comment_to_snacks_item(comment)
+    item.idx = i
+    table.insert(items, item)
+  end
+
+  return open_snacks_picker(items, "Code Review Comments")
+end
+
+--- List all threads using Snacks picker (thread-aware semantics)
+---@return boolean handled
+function M.list_threads_with_snacks()
+  if not pcall(require, "snacks") then
+    return false
+  end
+
+  local comments = state.get_comments()
+  if #comments == 0 then
+    vim.notify("No threads to display", vim.log.levels.INFO)
+    return true
+  end
+
+  -- Build thread tree
+  local thread_mod = require("code-review.thread")
+  local threads = thread_mod.build_thread_tree(comments)
+  local all_threads = state.get_all_threads()
+
+  -- Convert to sorted list (same ordering as the other pickers)
+  local thread_list = {}
+  for thread_id, thread_data in pairs(threads) do
+    table.insert(thread_list, {
+      id = thread_id,
+      data = thread_data,
+      status = all_threads[thread_id] and all_threads[thread_id].status or "open",
+    })
+  end
+
+  table.sort(thread_list, function(a, b)
+    local a_root = a.data.root_comment
+    local b_root = b.data.root_comment
+    if a_root.file ~= b_root.file then
+      return a_root.file < b_root.file
+    end
+    return a_root.line_start < b_root.line_start
+  end)
+
+  local items = {}
+  for i, thread_info in ipairs(thread_list) do
+    local root_comment = thread_info.data.root_comment
+
+    -- Status icon (match virtual text)
+    local status_icon = ""
+    if root_comment.thread_status == "action-required" then
+      status_icon = "○ "
+    elseif root_comment.thread_status == "waiting-review" then
+      status_icon = "󰇮 "
+    elseif thread_info.status == "resolved" then
+      status_icon = "✓ "
+    end
+
+    local item = comment_to_snacks_item(root_comment, thread_info)
+    item.idx = i
+    item.thread = thread_info
+    item.display = string.format("%s%s (%d comments)", status_icon, item.display, #thread_info.data.replies + 1)
+    table.insert(items, item)
+  end
+
+  return open_snacks_picker(items, "Code Review Threads")
+end
+
+--- Dispatch a listing action through the configured picker integration.
+--- Falls back to quickfix whenever a picker is unavailable.
+---@param kind "comments"|"threads"
+local function dispatch_picker(kind)
+  local impls = {
+    comments = {
+      snacks = M.list_with_snacks,
+      telescope = M.list_with_telescope,
+      ["fzf-lua"] = M.list_with_fzf_lua,
+      quickfix = M.list_with_quickfix,
+    },
+    threads = {
+      snacks = M.list_threads_with_snacks,
+      telescope = M.list_threads_with_telescope,
+      ["fzf-lua"] = M.list_threads_with_fzf_lua,
+      quickfix = M.list_threads_with_quickfix,
+    },
+  }
+  local set = impls[kind]
+
+  local picker = config.get("integrations.picker")
+  if picker == nil then
+    picker = "auto"
+  end
+
+  -- Explicitly disabled integration or explicit quickfix: always quickfix
+  if picker == false or picker == "quickfix" then
+    set.quickfix()
+    return
+  end
+
+  local order
+  if picker == "auto" then
+    order = { "snacks", "telescope", "fzf-lua" }
+  elseif picker == "snacks" or picker == "telescope" or picker == "fzf-lua" then
+    order = { picker }
+  else
+    vim.notify(
+      "Unknown integrations.picker: " .. tostring(picker) .. " (falling back to quickfix)",
+      vim.log.levels.WARN
+    )
+    set.quickfix()
+    return
+  end
+
+  for _, name in ipairs(order) do
+    if set[name]() then
+      return
+    end
+  end
+
+  -- Guaranteed fallback
+  set.quickfix()
+end
+
+--- List all comments using the configured picker
 function M.list_comments()
-  -- Try Telescope first
-  if M.list_with_telescope() then
-    return
-  end
+  dispatch_picker("comments")
+end
 
-  -- Try fzf-lua
-  if M.list_with_fzf_lua() then
-    return
-  end
-
-  -- Fallback to quickfix
+--- List all comments using the native quickfix window, ignoring picker config
+function M.list_comments_quickfix()
   M.list_with_quickfix()
 end
 
@@ -856,19 +1065,13 @@ function M.list_threads_with_telescope()
   return true
 end
 
---- List all threads
+--- List all threads using the configured picker
 function M.list_threads()
-  -- Try Telescope first
-  if M.list_threads_with_telescope() then
-    return
-  end
+  dispatch_picker("threads")
+end
 
-  -- Try fzf-lua
-  if M.list_threads_with_fzf_lua() then
-    return
-  end
-
-  -- Fallback to quickfix
+--- List all threads using the native quickfix window, ignoring picker config
+function M.list_threads_quickfix()
   M.list_threads_with_quickfix()
 end
 
