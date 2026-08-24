@@ -1,284 +1,300 @@
 local M = {}
 
-local config = require("code-review.config")
+local git = require("code-review.git")
 
---- Format comments to markdown
----@param comments table[]
+-- Map of file extension to Markdown code-fence language
+local ext_to_lang = {
+  lua = "lua",
+  py = "python",
+  js = "javascript",
+  mjs = "javascript",
+  cjs = "javascript",
+  jsx = "javascript",
+  ts = "typescript",
+  mts = "typescript",
+  cts = "typescript",
+  tsx = "typescript",
+  json = "json",
+  jsonc = "json",
+  md = "markdown",
+  sh = "bash",
+  bash = "bash",
+  zsh = "bash",
+  fish = "fish",
+  vim = "vim",
+  go = "go",
+  rs = "rust",
+  rb = "ruby",
+  java = "java",
+  c = "c",
+  h = "c",
+  cpp = "cpp",
+  hpp = "cpp",
+  cxx = "cpp",
+  cs = "csharp",
+  html = "html",
+  css = "css",
+  scss = "scss",
+  less = "less",
+  yml = "yaml",
+  yaml = "yaml",
+  toml = "toml",
+  xml = "xml",
+  sql = "sql",
+  php = "php",
+  kt = "kotlin",
+  kts = "kotlin",
+  swift = "swift",
+  ex = "elixir",
+  exs = "elixir",
+  erl = "erlang",
+  hs = "haskell",
+  clj = "clojure",
+  r = "r",
+}
+
+-- Neovim filetype names that should map to a different Markdown language name
+local filetype_overrides = {
+  javascriptreact = "javascript",
+  typescriptreact = "typescript",
+  ["markdown.mdx"] = "markdown",
+  zsh = "bash",
+}
+
+--- Map a Neovim filetype to a Markdown code-fence language name
+---@param filetype string?
 ---@return string
-local function format_markdown(comments)
-  local lines = {}
-  local date_format = config.get("output.date_format")
-
-  -- Header
-  table.insert(lines, "# Code Review")
-  table.insert(lines, "")
-  table.insert(lines, string.format("**Date**: %s", os.date(date_format)))
-  table.insert(lines, string.format("**Total Comments**: %d", #comments))
-  table.insert(lines, "")
-
-  -- Group comments by file
-  local by_file = {}
-  for _, comment in ipairs(comments) do
-    by_file[comment.file] = by_file[comment.file] or {}
-    table.insert(by_file[comment.file], comment)
+function M.map_filetype(filetype)
+  if not filetype or filetype == "" then
+    return ""
   end
-
-  -- Sort files
-  local files = vim.tbl_keys(by_file)
-  table.sort(files)
-
-  -- Format each file's comments
-  for _, file in ipairs(files) do
-    table.insert(lines, string.format("## %s", file))
-    table.insert(lines, "")
-
-    local file_comments = by_file[file]
-    -- Sort by line number
-    table.sort(file_comments, function(a, b)
-      return a.line_start < b.line_start
-    end)
-
-    for _, comment in ipairs(file_comments) do
-      -- Location header
-      if comment.line_start == comment.line_end then
-        table.insert(lines, string.format("### Line %d", comment.line_start))
-      else
-        table.insert(lines, string.format("### Lines %d-%d", comment.line_start, comment.line_end))
-      end
-
-      -- Add timestamp
-      table.insert(lines, string.format("**Time**: %s", os.date(date_format, comment.timestamp)))
-      table.insert(lines, "")
-
-      -- Context code if available
-      if comment.context_lines and #comment.context_lines > 0 then
-        table.insert(lines, "```")
-        for i, line in ipairs(comment.context_lines) do
-          local line_num = comment.line_start + i - 1
-          table.insert(lines, string.format("%d: %s", line_num, line))
-        end
-        table.insert(lines, "```")
-        table.insert(lines, "")
-      end
-
-      -- Comment text
-      table.insert(lines, comment.comment)
-      table.insert(lines, "")
-    end
+  if filetype_overrides[filetype] then
+    return filetype_overrides[filetype]
   end
-
-  return table.concat(lines, "\n")
+  return filetype
 end
 
---- Format comments to minimal format (flat, for AI)
----@param comments table[]
+--- Infer the Markdown code-fence language for a file path
+---@param file string
 ---@return string
-local function format_minimal(comments)
-  local lines = {}
-  for _, comment in ipairs(comments) do
-    local location
-    if comment.line_start == comment.line_end then
-      location = string.format("%s:L%d", comment.file, comment.line_start)
-    else
-      location = string.format("%s:L%d-%d", comment.file, comment.line_start, comment.line_end)
-    end
-    -- Join multi-line comments into single line
-    local text = comment.comment:gsub("\n", " ")
-    table.insert(lines, location .. ": " .. text)
+function M.language_for_file(file)
+  local ext = file:match("%.([^%.%/]+)$")
+  if not ext then
+    return ""
   end
-  return table.concat(lines, "\n")
+  local lang = ext_to_lang[ext:lower()]
+  return lang or ""
 end
 
---- Format comments based on configured format
----@param comments table[]
----@return string
-function M.format(comments)
-  local format_type = config.get("output.format") or "detailed"
-  if format_type == "minimal" then
-    return format_minimal(comments)
-  else
-    return format_markdown(comments)
-  end
-end
+--- Render a single comment in the canonical OpenChamber format and return
+--- the lines
+---@param comment table
+---@return string[]
+function M.format_comment(comment)
+  local display_path = git.display_path(comment.file)
+  local modified = git.is_modified(comment.file)
 
---- Format a single comment for preview display (always detailed)
---- This is used for Telescope, fzf-lua, and buffer previews
----@param comment table The comment object
----@param opts? { include_header?: boolean, use_ansi?: boolean }
----@return string[] Lines of formatted markdown
-function M.format_single(comment, opts)
-  opts = opts or {}
-  local include_header = opts.include_header ~= false -- default true
-  local use_ansi = opts.use_ansi or false
+  local header = string.format(
+    "Comment on `%s` lines %d-%d%s:",
+    display_path,
+    comment.line_start,
+    comment.line_end,
+    modified and " (modified)" or ""
+  )
 
-  local lines = {}
+  local lines = { header, "" }
 
-  -- ANSI color codes for fzf
-  local colors = {
-    header = use_ansi and "\x1b[1;34m" or "", -- Bold blue
-    section = use_ansi and "\x1b[1;33m" or "", -- Bold yellow
-    code = use_ansi and "\x1b[36m" or "", -- Cyan
-    reset = use_ansi and "\x1b[0m" or "", -- Reset
-  }
-
-  if include_header then
-    -- Header with file and line info
-    table.insert(
-      lines,
-      string.format("%s## %s:%d-%d%s", colors.header, comment.file, comment.line_start, comment.line_end, colors.reset)
-    )
-    table.insert(lines, "")
-  end
-
-  -- Code context if available
+  -- Source context in a fenced code block
   if comment.context_lines and #comment.context_lines > 0 then
-    table.insert(lines, colors.section .. "### Context" .. colors.reset)
-    table.insert(lines, "")
-    table.insert(lines, colors.code .. "```" .. vim.fn.fnamemodify(comment.file, ":e"))
-    for _, line in ipairs(comment.context_lines) do
-      table.insert(lines, line)
+    local lang = M.language_for_file(display_path)
+    table.insert(lines, "```" .. lang)
+    for _, ctx_line in ipairs(comment.context_lines) do
+      table.insert(lines, ctx_line)
     end
-    table.insert(lines, "```" .. colors.reset)
+    table.insert(lines, "```")
     table.insert(lines, "")
   end
 
-  -- Comment content
-  table.insert(lines, colors.section .. "### Comment" .. colors.reset)
-  table.insert(lines, "")
-  -- Split comment by lines and add each line
-  for line in comment.comment:gmatch("[^\n]+") do
+  -- Comment text, preserving newlines
+  local text = comment.comment or ""
+  for line in (text .. "\n"):gmatch("([^\n]*)\n") do
     table.insert(lines, line)
+  end
+
+  -- Trim trailing empty lines
+  while lines[#lines] == "" do
+    table.remove(lines)
   end
 
   return lines
 end
 
---- Parse formatted content back to comments
+--- Format all comments as OpenChamber-style Markdown.
+--- Blocks are separated by exactly one blank line.
+---@param comments table[]
+---@return string
+function M.format(comments)
+  git._reset_cache()
+
+  local blocks = {}
+  for _, comment in ipairs(comments) do
+    table.insert(blocks, table.concat(M.format_comment(comment), "\n"))
+  end
+  return table.concat(blocks, "\n\n")
+end
+
+--- Format a single comment for preview display (used by pickers/previews).
+--- Returns lines of the canonical OpenChamber representation.
+---@param comment table The comment object
+---@param opts? { include_header?: boolean }
+---@return string[] Lines of formatted markdown
+function M.format_single(comment, opts)
+  opts = opts or {}
+  git._reset_cache()
+
+  local lines = M.format_comment(comment)
+  if opts.include_header == false then
+    -- Drop the "Comment on ..." header line (and its separating blank line)
+    table.remove(lines, 1)
+    if lines[1] == "" then
+      table.remove(lines, 1)
+    end
+  end
+  return lines
+end
+
+--- Parse canonical OpenChamber-formatted content back to comments
 ---@param content string
 ---@return table[] comments
 function M.parse(content)
-  return M.parse_markdown(content)
-end
-
---- Parse markdown content
----@param content string
----@return table[]
-function M.parse_markdown(content)
   local lines = vim.split(content, "\n")
   local comments = {}
-  local current_comment = nil
-  local in_code_block = false
-  local i = 1
+  local current = nil
 
+  local function flush()
+    if current and current.comment then
+      -- Trim trailing blank lines from comment text. Blocks without any
+      -- comment text are dropped.
+      current.comment = current.comment:gsub("%s+$", "")
+      if current.comment ~= "" then
+        table.insert(comments, current)
+      end
+    end
+    current = nil
+  end
+
+  local i = 1
   while i <= #lines do
     local line = lines[i]
 
-    -- Skip empty lines and header
-    if line:match("^#%s+Code Review") or line:match("^%*%*Date%*%*:") or line:match("^%*%*Total Comments%*%*:") then
-      i = i + 1
-      goto continue
+    -- Header: Comment on `path` lines S-E: (optionally with "(modified)")
+    local file, lstart, lend = line:match("^Comment on `([^`]+)` lines (%d+)%-(%d+) %(%s*modified%s*%):%s*$")
+    if not file then
+      file, lstart, lend = line:match("^Comment on `([^`]+)` lines (%d+)%-(%d+):%s*$")
     end
 
-    -- File header
-    if line:match("^##%s+(.+)") then
-      -- Save any pending comment before starting new file
-      if current_comment and current_comment.comment and current_comment.comment ~= "" then
-        table.insert(comments, current_comment)
-      end
-
-      local file = line:match("^##%s+(.+)")
-      current_comment = { file = file }
+    if file then
+      flush()
+      current = {
+        file = file,
+        line_start = tonumber(lstart),
+        line_end = tonumber(lend),
+        context_lines = {},
+        comment = "",
+      }
       i = i + 1
-      goto continue
-    end
-
-    -- Line/Lines header
-    if line:match("^###%s+Line[s]?%s+") then
-      if current_comment and current_comment.comment then
-        -- Save previous comment
-        table.insert(comments, current_comment)
+    elseif current and line:match("^```") then
+      -- Code fence: capture context lines until closing fence
+      i = i + 1
+      local ctx = {}
+      while i <= #lines and not lines[i]:match("^```") do
+        table.insert(ctx, lines[i])
+        i = i + 1
       end
-
-      local single = line:match("^###%s+Line%s+(%d+)")
-      if single then
-        current_comment = {
-          file = current_comment and current_comment.file,
-          line_start = tonumber(single),
-          line_end = tonumber(single),
-          context_lines = {},
-          comment = "",
-        }
-      else
-        local start, end_ = line:match("^###%s+Lines%s+(%d+)%-(%d+)")
-        if start and end_ then
-          current_comment = {
-            file = current_comment and current_comment.file,
-            line_start = tonumber(start),
-            line_end = tonumber(end_),
-            context_lines = {},
-            comment = "",
-          }
-        end
+      current.context_lines = ctx
+      -- Skip closing fence (if present)
+      if i <= #lines then
+        i = i + 1
+      end
+    elseif current then
+      -- Comment text accumulation (skip leading blank lines before text starts)
+      if current.comment ~= "" then
+        current.comment = current.comment .. "\n" .. line
+      elseif line ~= "" then
+        current.comment = line
       end
       i = i + 1
-      goto continue
-    end
-
-    -- Code block markers
-    if line == "```" then
-      in_code_block = not in_code_block
+    else
       i = i + 1
-      goto continue
     end
-
-    -- Inside code block
-    if in_code_block and current_comment then
-      -- Parse context line (format: "123: code here")
-      local num, code = line:match("^(%d+):%s(.*)$")
-      if num and code then
-        table.insert(current_comment.context_lines, code)
-      end
-      i = i + 1
-      goto continue
-    end
-
-    -- Skip Time line
-    if line:match("^%*%*Time%*%*:") then
-      i = i + 1
-      goto continue
-    end
-
-    -- Comment text
-    if current_comment and not in_code_block and line ~= "" then
-      if current_comment.comment == "" then
-        current_comment.comment = line
-      else
-        current_comment.comment = current_comment.comment .. "\n" .. line
-      end
-    end
-
-    ::continue::
-    i = i + 1
   end
 
-  -- Save last comment
-  if current_comment and current_comment.comment and current_comment.comment ~= "" then
-    table.insert(comments, current_comment)
-  end
-
-  -- Restore IDs and timestamps
-  for i, comment in ipairs(comments) do
-    comment.id = comment.id or (vim.fn.localtime() .. "_" .. i)
-    comment.timestamp = comment.timestamp or os.time()
-  end
+  flush()
 
   return comments
+end
+
+--- Reconcile freshly-parsed comments against existing stored comments,
+--- preserving internal metadata (id, timestamp, author, thread fields) that
+--- is not represented in the exported text.
+---@param new_comments table[]
+---@param old_comments table[]
+---@return table[]
+function M.reconcile(new_comments, old_comments)
+  local meta_fields = {
+    "id",
+    "timestamp",
+    "author",
+    "thread_id",
+    "parent_id",
+    "thread_status",
+  }
+
+  -- Group existing comments by location so matches are consumed one by one
+  local buckets = {}
+  for _, old in ipairs(old_comments or {}) do
+    if old.file and old.line_start and old.line_end then
+      local key = old.file .. "\n" .. old.line_start .. "\n" .. old.line_end
+      buckets[key] = buckets[key] or {}
+      table.insert(buckets[key], old)
+    end
+  end
+
+  for _, new in ipairs(new_comments) do
+    local key = new.file .. "\n" .. new.line_start .. "\n" .. new.line_end
+    local candidates = buckets[key]
+    if candidates and #candidates > 0 then
+      -- Prefer the strongest match: identical comment text and context
+      local best_idx = nil
+      local fallback_idx = nil
+      for idx, old in ipairs(candidates) do
+        local same_text = old.comment == new.comment
+        local same_ctx = vim.deep_equal(old.context_lines or {}, new.context_lines or {})
+        if same_text and same_ctx then
+          best_idx = idx
+          break
+        elseif same_text and not fallback_idx then
+          fallback_idx = idx
+        end
+      end
+      local use = best_idx or fallback_idx or 1
+      local old = table.remove(candidates, use)
+      for _, field in ipairs(meta_fields) do
+        if old[field] ~= nil then
+          new[field] = old[field]
+        end
+      end
+    end
+  end
+
+  return new_comments
 end
 
 --- Save formatted content to file
 ---@param content string
 ---@param path string?
 function M.save_to_file(content, path)
+  local config = require("code-review.config")
   local utils = require("code-review.utils")
 
   if not path then

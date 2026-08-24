@@ -94,7 +94,7 @@ T["comment formatting"] = function()
 
   -- Check content
   local content = table.concat(lines, "\n")
-  helpers.expect.match(content, "test.lua:10%-15")
+  helpers.expect.match(content, "Comment on `test.lua` lines 10%-15:")
   helpers.expect.match(content, "This is a test comment")
   helpers.expect.match(content, "With multiple lines")
   helpers.expect.match(content, "function test")
