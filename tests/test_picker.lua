@@ -62,6 +62,12 @@ T["default borders are single"] = function()
   MiniTest.expect.equality(config.get("ui.preview.float.border"), "single")
 end
 
+T["default preview is a centered float"] = function()
+  local config = require("code-review.config")
+  config.setup({})
+  MiniTest.expect.equality(config.get("ui.preview.split"), "float")
+end
+
 T["quickfix key is <leader>rq"] = function()
   local config = require("code-review.config")
   config.setup({})
@@ -334,6 +340,74 @@ T["snacks confirm jumps to comment file and line"] = function()
 
   vim.cmd("bwipeout!")
   vim.fn.delete(file)
+end
+
+T["snacks delete keybinds are wired"] = function()
+  local captured = stub_snacks()
+  local list = require("code-review.list")
+
+  seed({
+    { file = "src/a.lua", line_start = 1, line_end = 1, comment = "c", context_lines = {} },
+  })
+
+  list.list_with_snacks()
+
+  MiniTest.expect.equality(type(captured.opts.actions.code_review_delete), "function")
+  local keys = captured.opts.win
+  MiniTest.expect.equality(keys.list.keys["dd"], "code_review_delete")
+  MiniTest.expect.equality(keys.list.keys["<C-d>"], "code_review_delete")
+end
+
+T["snacks delete action removes the comment and reopens"] = function()
+  local captured = stub_snacks()
+  local list = require("code-review.list")
+  local state = require("code-review.state")
+
+  seed({
+    { file = "src/a.lua", line_start = 1, line_end = 1, comment = "to delete", context_lines = {} },
+    { file = "src/b.lua", line_start = 5, line_end = 5, comment = "to keep", context_lines = {} },
+  })
+
+  list.list_with_snacks()
+
+  local closed = false
+  local reopens = 1
+  captured.opts.actions.code_review_delete({ close = function()
+    closed = true
+  end }, captured.opts.items[1])
+
+  vim.wait(200, function()
+    return false
+  end)
+
+  MiniTest.expect.equality(closed, true)
+  local comments = state.get_comments()
+  MiniTest.expect.equality(#comments, 1)
+  MiniTest.expect.equality(comments[1].comment, "to keep")
+  MiniTest.expect.equality(reopens >= 1, true)
+end
+
+T["snacks thread delete removes the whole thread"] = function()
+  local captured = stub_snacks()
+  local list = require("code-review.list")
+  local state = require("code-review.state")
+
+  seed({
+    { file = "src/a.lua", line_start = 1, line_end = 1, comment = "root", context_lines = {} },
+    { file = "src/b.lua", line_start = 5, line_end = 5, comment = "other root", context_lines = {} },
+  })
+  local comments = state.get_comments()
+  state.add_reply(comments[1].id, "a reply")
+  state.add_reply(comments[1].id, "another reply")
+
+  list.list_threads_with_snacks()
+
+  local first = captured.opts.items[1]
+  captured.opts.actions.code_review_delete({ close = function() end }, first)
+
+  local remaining = state.get_comments()
+  MiniTest.expect.equality(#remaining, 1)
+  MiniTest.expect.equality(remaining[1].comment, "other root")
 end
 
 T["snacks thread list keeps thread semantics"] = function()

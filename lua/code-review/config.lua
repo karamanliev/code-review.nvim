@@ -21,7 +21,8 @@ local defaults = {
     },
     -- Preview window settings
     preview = {
-      split = "vertical", -- 'vertical' or 'horizontal' or 'float'
+      -- 'float' (centered popup, default), 'vertical', or 'horizontal'
+      split = "float",
       vertical_width = 100,
       horizontal_height = 20,
       float = {
