@@ -164,6 +164,8 @@ require('code-review').setup({
       },
     },
     auto_copy_on_add = false, -- Automatically copy each new comment to clipboard when added
+    -- Ask for confirmation before deleting a comment at the cursor
+    confirm_delete = true,
     -- Author name used by Claude Code (for automatic status management)
     -- Comments from this author trigger "waiting-review" status
     -- Comments from other authors trigger "action-required" status
@@ -183,6 +185,7 @@ require('code-review').setup({
     list_comments = '<leader>rl',
     quickfix = '<leader>rq',
     delete_comment = '<leader>rd',
+    edit_comment = '<leader>re',
   },
   -- Picker integration
   integrations = {
@@ -307,6 +310,7 @@ end
 | `:CodeReviewCopy`            | `<leader>ry`   | Copy review to clipboard                                    |
 | `:CodeReviewClear`           | `<leader>rx`   | Clear all review comments                                   |
 | `:CodeReviewDeleteComment`   | `<leader>rd`   | Delete comment at cursor position                           |
+| `:CodeReviewEditComment`     | `<leader>re`   | Edit comment at cursor position                             |
 | `:CodeReviewResolveThread`   | -              | Mark current thread as resolved                             |
 | `:CodeReviewReopenThread`    | -              | Reopen a resolved thread                                    |
 
@@ -330,6 +334,7 @@ end
 | `require('code-review').copy()`                     | Copy to clipboard                       |
 | `require('code-review').clear()`                    | Clear all comments                      |
 | `require('code-review').delete_comment_at_cursor()` | Delete comment at cursor                |
+| `require('code-review').edit_comment_at_cursor()`   | Edit comment at cursor                  |
 
 ### Visual Mode Selection
 
@@ -388,13 +393,14 @@ With [Snacks.nvim](https://github.com/folke/snacks.nvim) installed, comments are
 filepaths, line ranges, and full comment text, and the source file is previewed positioned at the
 commented range. Pressing `<Enter>` jumps to the comment.
 
-Inside the picker you can delete items directly without leaving the list:
+Inside the picker you can delete or edit items directly without leaving the list:
 
-- `dd` or `<C-d>` in the list window (normal mode)
-- `<C-d>` in the filter input
+- `dd` or `<C-d>` in the list window (normal mode), `<C-d>` in the filter input — delete
+- `e` or `<C-e>` in the list window, `<C-e>` in the filter input — open the edit window for the item
 
 Deleting a comment removes just that comment; deleting a thread removes the whole thread (root plus
-all its replies).
+all its replies). Editing pre-fills the input window with the existing comment text; submitting
+updates it, cancelling keeps it unchanged.
 
 The layout can be selected per integration and is forwarded to Snacks unchanged, so any Snacks
 layout name or full layout table works:

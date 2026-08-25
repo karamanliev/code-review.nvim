@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Native [Snacks.nvim](https://github.com/folke/snacks.nvim) picker integration for comments and threads
 - Delete items directly in the Snacks picker list (`dd` / `<C-d>`); thread rows delete the entire thread
+- Edit comments via `<leader>re` (`:CodeReviewEditComment`), or from the Snacks picker with `e` / `<C-e>`; the input window is prefilled with the existing text
+- `comment.confirm_delete` option; set to `false` to delete comments at the cursor without the Yes/No dialog
 - `integrations.picker` dispatch that honors `auto`, `snacks`, `telescope`, `fzf-lua`, `quickfix`, and `false` with graceful fallbacks
 - Picker layout passthrough via `integrations.layout` and `integrations.<picker>.layout`
 - `:CodeReviewQuickfix` command, `list_quickfix()` API, and `<leader>rq` keymap that always open the native quickfix list
