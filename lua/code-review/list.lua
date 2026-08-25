@@ -512,17 +512,43 @@ local function open_snacks_picker(items, title, status_icon, reopen)
           vim.schedule(reopen)
         end
       end,
+      code_review_edit = function(p, item)
+        if not item or not item.comment then
+          return
+        end
+        p:close()
+        require("code-review.ui").show_comment_input(function(text)
+          -- nil means cancelled; empty text keeps the comment as-is
+          if not text or text == "" then
+            return
+          end
+          state.update_comment(item.comment.id, { comment = text })
+          vim.notify("Comment updated", vim.log.levels.INFO)
+          -- Reopen so the listing reflects the edit
+          if reopen and #state.get_comments() > 0 then
+            vim.schedule(reopen)
+          end
+        end, {
+          file = item.comment.file,
+          line_start = item.comment.line_start,
+          line_end = item.comment.line_end,
+          lines = item.comment.context_lines or {},
+        }, " Edit Comment ", { initial_text = item.comment.comment })
+      end,
     },
     win = {
       input = {
         keys = {
           ["<C-d>"] = { "code_review_delete", mode = { "i", "n" } },
+          ["<C-e>"] = { "code_review_edit", mode = { "i", "n" } },
         },
       },
       list = {
         keys = {
           ["dd"] = "code_review_delete",
           ["<C-d>"] = "code_review_delete",
+          ["e"] = "code_review_edit",
+          ["<C-e>"] = "code_review_edit",
         },
       },
     },

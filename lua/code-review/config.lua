@@ -76,6 +76,9 @@ local defaults = {
     },
     -- Automatically copy each new comment to clipboard when added
     auto_copy_on_add = false,
+    -- Ask for confirmation before deleting a comment at the cursor.
+    -- Set to false to delete immediately without the Yes/No dialog.
+    confirm_delete = true,
     -- Author name used by Claude Code (for automatic status management)
     -- Comments from this author trigger "waiting-review" status
     -- Comments from other authors trigger "action-required" status
@@ -130,6 +133,11 @@ local defaults = {
     delete_comment = {
       mode = "n",
       key = "<leader>rd",
+    },
+    -- Edit comment at cursor
+    edit_comment = {
+      mode = "n",
+      key = "<leader>re",
     },
     -- Reply to comment at cursor
     reply_comment = {

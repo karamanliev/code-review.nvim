@@ -358,6 +358,46 @@ T["snacks delete keybinds are wired"] = function()
   MiniTest.expect.equality(keys.list.keys["<C-d>"], "code_review_delete")
 end
 
+T["snacks edit keybinds are wired"] = function()
+  local captured = stub_snacks()
+  local list = require("code-review.list")
+
+  seed({
+    { file = "src/a.lua", line_start = 1, line_end = 1, comment = "c", context_lines = {} },
+  })
+
+  list.list_with_snacks()
+
+  MiniTest.expect.equality(type(captured.opts.actions.code_review_edit), "function")
+  local keys = captured.opts.win
+  MiniTest.expect.equality(keys.list.keys["e"], "code_review_edit")
+  MiniTest.expect.equality(keys.list.keys["<C-e>"], "code_review_edit")
+end
+
+T["delete confirmation default on, opt-out supported"] = function()
+  local config = require("code-review.config")
+  config.setup({})
+  MiniTest.expect.equality(config.get("comment.confirm_delete"), true)
+  config.setup({ comment = { confirm_delete = false } })
+  MiniTest.expect.equality(config.get("comment.confirm_delete"), false)
+  config.setup({})
+end
+
+T["edit comment keymap default"] = function()
+  local config = require("code-review.config")
+  config.setup({})
+  MiniTest.expect.equality(config.get("keymaps.edit_comment.key"), "<leader>re")
+end
+
+T["comment input prefills initial text when editing"] = function()
+  local ui = require("code-review.ui")
+  ui.show_comment_input(function() end, nil, " Edit Comment ", { initial_text = "hello\nworld" })
+  local buf = vim.api.nvim_get_current_buf()
+  local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+  MiniTest.expect.equality(lines, { "hello", "world" })
+  vim.b[buf]._code_review_cancel()
+end
+
 T["snacks delete action removes the comment and reopens"] = function()
   local captured = stub_snacks()
   local list = require("code-review.list")

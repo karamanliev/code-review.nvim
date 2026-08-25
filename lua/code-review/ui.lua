@@ -116,13 +116,20 @@ end
 ---@param callback function(string?) Called with the comment text or nil if cancelled
 ---@param context table? Optional context with line_start and line_end
 ---@param title string? Optional window title (defaults to config)
-function M.show_comment_input(callback, context, title)
+---@param opts { initial_text?: string }? Optional extra options (e.g. prefilled text for editing)
+function M.show_comment_input(callback, context, title, opts)
+  opts = opts or {}
   local conf = config.get("ui.input_window")
 
   -- Create buffer
   local buf = vim.api.nvim_create_buf(false, true)
   vim.api.nvim_buf_set_option(buf, "bufhidden", "wipe")
   vim.api.nvim_buf_set_option(buf, "filetype", "markdown")
+
+  -- Prefill with existing text when editing
+  if opts.initial_text and opts.initial_text ~= "" then
+    vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(opts.initial_text, "\n"))
+  end
   -- Enable word wrap
   vim.api.nvim_buf_set_option(buf, "wrap", true)
   vim.api.nvim_buf_set_option(buf, "linebreak", true)

@@ -63,6 +63,10 @@ function M.setup(opts)
     M.delete_comment_at_cursor()
   end, { desc = "Delete comment at cursor position" })
 
+  vim.api.nvim_create_user_command("CodeReviewEditComment", function()
+    M.edit_comment_at_cursor()
+  end, { desc = "Edit comment at cursor position" })
+
   vim.api.nvim_create_user_command("CodeReviewReply", function()
     M.reply_to_comment_at_cursor()
   end, { desc = "Reply to comment at cursor position" })
@@ -111,6 +115,7 @@ function M.setup(opts)
             list_comments = "List all comments",
             quickfix = "List all comments in quickfix",
             delete_comment = "Delete comment at cursor",
+            edit_comment = "Edit comment at cursor",
             reply_comment = "Reply to comment at cursor",
             resolve_thread = "Resolve thread at cursor",
           }
@@ -127,6 +132,7 @@ function M.setup(opts)
             list_comments = M.list_comments,
             quickfix = M.list_quickfix,
             delete_comment = M.delete_comment_at_cursor,
+            edit_comment = M.edit_comment_at_cursor,
             reply_comment = M.reply_to_comment_at_cursor,
             resolve_thread = M.resolve_thread_at_cursor,
           }
@@ -530,23 +536,83 @@ function M.delete_comment_at_cursor()
         vim.notify("Comment deleted")
       end
     end)
-  else
-    -- Single comment, confirm deletion
-    local comment_data = line_comments[1]
-    local first_line = comment_data.comment:match("^[^\n]*") or comment_data.comment
-    if #first_line > 50 then
-      first_line = first_line:sub(1, 47) .. "..."
-    end
+    return
+  end
 
-    vim.ui.select({ "Yes", "No" }, {
-      prompt = string.format("Delete comment: %s?", first_line),
+  -- Single comment
+  local comment_data = line_comments[1]
+
+  if not config.get("comment.confirm_delete") then
+    state.delete_comment(comment_data.id)
+    vim.notify("Comment deleted")
+    return
+  end
+
+  local first_line = comment_data.comment:match("^[^\n]*") or comment_data.comment
+  if #first_line > 50 then
+    first_line = first_line:sub(1, 47) .. "..."
+  end
+
+  vim.ui.select({ "Yes", "No" }, {
+    prompt = string.format("Delete comment: %s?", first_line),
+  }, function(choice)
+    if choice == "Yes" then
+      state.delete_comment(comment_data.id)
+      vim.notify("Comment deleted")
+    end
+  end)
+end
+
+--- Edit the comment at the cursor position
+--- Opens the comment input window prefilled with the existing text;
+--- submitting updates the comment, cancelling keeps it unchanged.
+function M.edit_comment_at_cursor()
+  local bufnr = vim.api.nvim_get_current_buf()
+  local file = utils.normalize_path(vim.api.nvim_buf_get_name(bufnr))
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+
+  local line_comments = state.get_comments_at_location(file, row)
+
+  if #line_comments == 0 then
+    vim.notify("No comment at cursor position", vim.log.levels.WARN)
+    return
+  end
+
+  local function edit(comment_data)
+    ui.show_comment_input(function(text)
+      -- nil means cancelled; empty text keeps the comment as-is
+      if not text or text == "" then
+        return
+      end
+      state.update_comment(comment_data.id, { comment = text })
+      vim.notify("Comment updated")
+    end, {
+      file = comment_data.file,
+      line_start = comment_data.line_start,
+      line_end = comment_data.line_end,
+      lines = comment_data.context_lines or {},
+    }, " Edit Comment ", { initial_text = comment_data.comment })
+  end
+
+  if #line_comments > 1 then
+    vim.ui.select(line_comments, {
+      prompt = "Select comment to edit:",
+      format_item = function(item)
+        local first_line = item.comment:match("^[^\n]*") or item.comment
+        if #first_line > 50 then
+          first_line = first_line:sub(1, 47) .. "..."
+        end
+        return string.format("Line %d-%d: %s", item.line_start, item.line_end, first_line)
+      end,
     }, function(choice)
-      if choice == "Yes" then
-        state.delete_comment(comment_data.id)
-        vim.notify("Comment deleted")
+      if choice then
+        edit(choice)
       end
     end)
+    return
   end
+
+  edit(line_comments[1])
 end
 
 --- Get input buffer functions for keymapping
