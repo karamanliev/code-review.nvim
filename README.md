@@ -119,7 +119,7 @@ require('code-review').setup({
     },
     -- Preview window
     preview = {
-      split = 'vertical', -- 'vertical', 'horizontal', or 'float'
+      split = 'float', -- 'float' (centered popup, default), 'vertical', or 'horizontal'
       vertical_width = 100,
       horizontal_height = 20,
       float = {
@@ -387,6 +387,14 @@ With [Snacks.nvim](https://github.com/folke/snacks.nvim) installed, comments are
 `Snacks.picker`: compact rows show `file:line-range` plus the first comment line, fuzzy search covers
 filepaths, line ranges, and full comment text, and the source file is previewed positioned at the
 commented range. Pressing `<Enter>` jumps to the comment.
+
+Inside the picker you can delete items directly without leaving the list:
+
+- `dd` or `<C-d>` in the list window (normal mode)
+- `<C-d>` in the filter input
+
+Deleting a comment removes just that comment; deleting a thread removes the whole thread (root plus
+all its replies).
 
 The layout can be selected per integration and is forwarded to Snacks unchanged, so any Snacks
 layout name or full layout table works:

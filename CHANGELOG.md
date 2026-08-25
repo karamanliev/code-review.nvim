@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - Native [Snacks.nvim](https://github.com/folke/snacks.nvim) picker integration for comments and threads
+- Delete items directly in the Snacks picker list (`dd` / `<C-d>`); thread rows delete the entire thread
 - `integrations.picker` dispatch that honors `auto`, `snacks`, `telescope`, `fzf-lua`, `quickfix`, and `false` with graceful fallbacks
 - Picker layout passthrough via `integrations.layout` and `integrations.<picker>.layout`
 - `:CodeReviewQuickfix` command, `list_quickfix()` API, and `<leader>rq` keymap that always open the native quickfix list
@@ -20,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - The canonical output format is now the OpenChamber-compatible `Comment on \`file\` lines S-E:` style used for clipboard, saved files, the editable preview, and picker detail previews
 - Default add-comment keymap changed from `<leader>rc` to `<leader>ra`
+- Preview window now opens as a centered floating popup by default (`ui.preview.split = "float"`)
 - Default input-window keys: `<CR>` submits, `<S-CR>` inserts a newline, `<Esc>` cancels
 - Floating window borders default to `single`
 - Parser rewritten for the canonical format (legacy detailed parsing removed)

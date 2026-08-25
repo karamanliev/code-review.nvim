@@ -454,11 +454,31 @@ local function snacks_format_row(status_icon)
   end
 end
 
+--- Delete the comment(s) referenced by a Snacks picker item.
+--- Thread items delete the whole thread; plain items delete the comment.
+---@param item table
+local function delete_snacks_item(item)
+  if not item or not item.comment then
+    return
+  end
+  if item.thread then
+    -- Delete every comment of the thread (root + replies)
+    for _, c in ipairs(state.get_thread_comments(item.thread.id)) do
+      state.delete_comment(c.id)
+    end
+    vim.notify("Thread deleted", vim.log.levels.INFO)
+    return
+  end
+  state.delete_comment(item.comment.id)
+  vim.notify("Comment deleted", vim.log.levels.INFO)
+end
+
 --- Open a Snacks picker for the given items
 ---@param items table[]
 ---@param title string
 ---@param status_icon string? unused placeholder for future icon config
-local function open_snacks_picker(items, title, status_icon)
+---@param reopen function? Reopens this picker listing after a delete
+local function open_snacks_picker(items, title, status_icon, reopen)
   local ok, Snacks = pcall(require, "snacks")
   if not ok then
     return false
@@ -480,6 +500,32 @@ local function open_snacks_picker(items, title, status_icon)
         end
       end
     end,
+    actions = {
+      code_review_delete = function(p, item)
+        if not item then
+          return
+        end
+        delete_snacks_item(item)
+        p:close()
+        -- Reopen so the listing reflects the deletion
+        if reopen and #state.get_comments() > 0 then
+          vim.schedule(reopen)
+        end
+      end,
+    },
+    win = {
+      input = {
+        keys = {
+          ["<C-d>"] = { "code_review_delete", mode = { "i", "n" } },
+        },
+      },
+      list = {
+        keys = {
+          ["dd"] = "code_review_delete",
+          ["<C-d>"] = "code_review_delete",
+        },
+      },
+    },
   })
 
   return true
@@ -514,7 +560,7 @@ function M.list_with_snacks()
     table.insert(items, item)
   end
 
-  return open_snacks_picker(items, "Code Review Comments", true)
+  return open_snacks_picker(items, "Code Review Comments", true, M.list_with_snacks)
 end
 
 --- List all threads using Snacks picker (thread-aware semantics)
@@ -581,7 +627,7 @@ function M.list_threads_with_snacks()
     table.insert(items, item)
   end
 
-  return open_snacks_picker(items, "Code Review Threads", true)
+  return open_snacks_picker(items, "Code Review Threads", true, M.list_threads_with_snacks)
 end
 
 --- Dispatch a listing action through the configured picker integration.
