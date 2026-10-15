@@ -90,6 +90,7 @@ T["toggle opens an unfocused compact right aligned box and closes it"] = functio
   MiniTest.expect.equality(conf.relative, "editor")
   MiniTest.expect.equality(conf.width, 38)
   MiniTest.expect.equality(conf.height, 1)
+  MiniTest.expect.equality(conf.border, { "", "", "", "", "", { " ", "NormalFloat" }, "", "" })
   MiniTest.expect.equality(vim.api.nvim_win_get_option(window(), "statusline"), "")
   MiniTest.expect.equality(vim.api.nvim_win_get_option(window(), "winbar"), "")
   MiniTest.expect.equality(conf.col + conf.width < vim.o.columns, true)
@@ -118,8 +119,23 @@ T["each comment including replies gets one truncated line and contributes to the
   for _, line in ipairs(lines()) do
     MiniTest.expect.equality(vim.fn.strdisplaywidth(line) <= 38, true)
   end
-  local title = vim.api.nvim_win_get_config(window()).title
-  MiniTest.expect.equality(title[1][1], " Review comments · 2 ")
+  for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+    local header_buf = vim.api.nvim_win_get_buf(candidate)
+    if vim.bo[header_buf].filetype == "code-review-hud-header" then
+      local title = vim.api.nvim_buf_get_lines(header_buf, 0, -1, false)[1]
+      MiniTest.expect.equality(vim.trim(title), "Review comments · 2")
+      MiniTest.expect.equality(title:sub(1, 2), " R")
+      local header_conf = vim.api.nvim_win_get_config(candidate)
+      local body_conf = vim.api.nvim_win_get_config(window())
+      MiniTest.expect.equality(header_conf.col, body_conf.col)
+      MiniTest.expect.equality(header_conf.row + 1, body_conf.row)
+      MiniTest.expect.equality(header_conf.width, body_conf.width)
+      MiniTest.expect.equality(header_conf.focusable, false)
+      MiniTest.expect.equality(vim.fn.strdisplaywidth(title), body_conf.width)
+      return
+    end
+  end
+  error("Missing header")
 end
 
 T["updates after add edit delete and clear without stealing focus"] = function()
@@ -128,11 +144,11 @@ T["updates after add edit delete and clear without stealing focus"] = function()
   add("two", 20)
   MiniTest.expect.equality(#lines(), 2)
   state.update_comment("two", { comment = "Edited" })
-  MiniTest.expect.equality(lines()[1], "[1] hud-test.lua:10 one")
-  MiniTest.expect.equality(lines()[2], "[2] hud-test.lua:20 Edited")
+  MiniTest.expect.equality(lines()[1], " [1] hud-test.lua:10 one ")
+  MiniTest.expect.equality(lines()[2], " [2] hud-test.lua:20 Edited ")
   state.delete_comment("one")
   MiniTest.expect.equality(#lines(), 1)
-  MiniTest.expect.equality(lines()[1], "[1] hud-test.lua:20 Edited")
+  MiniTest.expect.equality(lines()[1], " [1] hud-test.lua:20 Edited ")
   MiniTest.expect.equality(vim.api.nvim_get_current_win(), editor)
   state.clear()
   MiniTest.expect.equality(window(), nil)
@@ -149,7 +165,7 @@ T["dd selects the next comment and last deletion returns to the editor"] = funct
   press("dd")
   MiniTest.expect.equality(state.get_comment("two"), nil)
   MiniTest.expect.equality(vim.api.nvim_win_get_cursor(window())[1], 2)
-  MiniTest.expect.equality(lines()[2], "[2] hud-test.lua:30 three")
+  MiniTest.expect.equality(lines()[2], " [2] hud-test.lua:30 three ")
   press("dd")
   press("dd")
   MiniTest.expect.equality(window(), nil)
@@ -251,6 +267,136 @@ T["last deletion tolerates refresh callbacks when returning focus"] = function()
   press("dd")
   MiniTest.expect.equality(window(), nil)
   MiniTest.expect.equality(vim.api.nvim_get_current_win(), editor)
+end
+
+T["keeps popup bars hidden when statusline plugins set them on focus changes"] = function()
+  local group = vim.api.nvim_create_augroup("CodeReviewHudTest", { clear = true })
+  vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave", "BufEnter", "BufLeave" }, {
+    group = group,
+    callback = function()
+      vim.wo.statusline = "Custom statusline"
+      vim.wo.winbar = "Custom winbar"
+    end,
+  })
+  add("one", 10)
+  add("two", 20)
+  add("three", 30)
+  cr.focus_hud()
+  MiniTest.expect.equality(vim.wait(100, function()
+    return vim.api.nvim_win_get_option(window(), "statusline") == ""
+      and vim.api.nvim_win_get_option(window(), "winbar") == ""
+  end), true)
+  press("q")
+  MiniTest.expect.equality(vim.wait(100, function()
+    return vim.api.nvim_win_get_option(window(), "statusline") == ""
+      and vim.api.nvim_win_get_option(window(), "winbar") == ""
+  end), true)
+  MiniTest.expect.equality(vim.api.nvim_win_get_option(editor, "statusline"), "Custom statusline")
+  MiniTest.expect.equality(vim.api.nvim_win_get_option(editor, "winbar"), "Custom winbar")
+  vim.api.nvim_win_set_option(editor, "statusline", "")
+  vim.api.nvim_win_set_option(editor, "winbar", "")
+end
+
+T["comment text is italic while numbering and location stay unstyled"] = function()
+  add("one", 10, "Comment text")
+  cr.toggle_hud()
+  local buf = vim.api.nvim_win_get_buf(window())
+  local ns = vim.api.nvim_get_namespaces().CodeReviewHudComments
+  local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+  MiniTest.expect.equality(#marks, 1)
+  MiniTest.expect.equality(marks[1][3], #" [1] hud-test.lua:10 ")
+  MiniTest.expect.equality(marks[1][4].hl_group, "CodeReviewHudComment")
+  MiniTest.expect.equality(vim.api.nvim_get_hl(0, { name = "CodeReviewHudComment" }).italic, true)
+  state.update_comment("one", { comment = "Updated" })
+  MiniTest.expect.equality(#vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, {}), 1)
+end
+
+T["colors only the digits inside brackets including multidigit numbers"] = function()
+  for index = 1, 12 do
+    add(tostring(index), index)
+  end
+  cr.toggle_hud()
+  local buf = vim.api.nvim_win_get_buf(window())
+  local ns = vim.api.nvim_get_namespaces().CodeReviewHudNumbers
+  local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
+  MiniTest.expect.equality(#marks, 12)
+  MiniTest.expect.equality(marks[1][3], 2)
+  MiniTest.expect.equality(marks[1][4].end_col, 3)
+  MiniTest.expect.equality(marks[12][3], 2)
+  MiniTest.expect.equality(marks[12][4].end_col, 4)
+  MiniTest.expect.equality(marks[12][4].hl_group, "CodeReviewHudNumber")
+  MiniTest.expect.equality(vim.api.nvim_get_hl(0, { name = "CodeReviewHudNumber" }).link, "Number")
+end
+
+T["mouse clicks jump to the clicked comment without changing mouse mappings"] = function()
+  local on_key, getmousepos = vim.on_key, vim.fn.getmousepos
+  local listener
+  local mouse = {}
+  vim.on_key = function(callback, ns)
+    if ns == vim.api.nvim_get_namespaces().CodeReviewHudMouse and callback then
+      listener = callback
+    end
+    return on_key(callback, ns)
+  end
+  vim.fn.getmousepos = function()
+    return mouse
+  end
+  local ok, err = pcall(function()
+    add("one", 10)
+    add("two", 42)
+    cr.toggle_hud()
+    local key = vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true)
+    mouse = { winid = window(), line = 2 }
+    listener(key)
+    MiniTest.expect.equality(vim.wait(100, function()
+      return vim.api.nvim_get_current_win() == editor and vim.api.nvim_win_get_cursor(editor)[1] == 42
+    end), true)
+    MiniTest.expect.equality(window() ~= nil, true)
+    mouse = { winid = editor, line = 10 }
+    listener(key)
+    vim.wait(20, function() return false end)
+    MiniTest.expect.equality(vim.api.nvim_win_get_cursor(editor)[1], 42)
+    mouse = { winid = window(), line = 0 }
+    listener(key)
+    vim.wait(20, function() return false end)
+    MiniTest.expect.equality(vim.api.nvim_win_get_cursor(editor)[1], 42)
+  end)
+  vim.on_key, vim.fn.getmousepos = on_key, getmousepos
+  assert(ok, err)
+end
+
+T["defaults to bottom right and supports all four corner positions"] = function()
+  local config = require("code-review.config")
+  MiniTest.expect.equality(config.get("ui.hud.position"), "bottom-right")
+  add("one", 10)
+  cr.toggle_hud()
+  for _, position in ipairs({ "top-left", "top-right", "bottom-left", "bottom-right" }) do
+    config.setup({ ui = { hud = { position = position } } })
+    hud.refresh()
+    local conf = vim.api.nvim_win_get_config(window())
+    local expected_row = position:match("^bottom")
+      and vim.o.lines - vim.o.cmdheight - (vim.o.laststatus > 0 and 1 or 0) - conf.height - 2
+      or 3
+    local expected_col = position:match("right$") and vim.o.columns - conf.width - 3 or 2
+    MiniTest.expect.equality(conf.row, expected_row)
+    MiniTest.expect.equality(conf.col, expected_col)
+    for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+      if vim.bo[vim.api.nvim_win_get_buf(candidate)].filetype == "code-review-hud-header" then
+        local header_conf = vim.api.nvim_win_get_config(candidate)
+        MiniTest.expect.equality(header_conf.row, conf.row - 1)
+        MiniTest.expect.equality(header_conf.col, conf.col)
+      end
+    end
+  end
+end
+
+T["bottom edge stays fixed as comments are added"] = function()
+  add("one", 10)
+  cr.toggle_hud()
+  local first = vim.api.nvim_win_get_config(window())
+  add("two", 20)
+  local second = vim.api.nvim_win_get_config(window())
+  MiniTest.expect.equality(second.row + second.height, first.row + first.height)
 end
 
 return T

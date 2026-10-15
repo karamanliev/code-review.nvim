@@ -207,12 +207,12 @@ require('code-review').setup({
 
 ### Live Comments Box
 
-`<leader>rt` toggles a compact floating box on the right without leaving the
+`<leader>rt` toggles a compact floating box in the bottom-right corner without leaving the
 editor. `<leader>rf` opens and focuses it. It updates after comment changes,
 shows the total count, and lists each comment (including replies) on one
 truncated line, sorted by file and line.
 
-Inside the box, use `j`/`k` to select a comment, `<CR>` to jump to its source,
+Inside the box, use `j`/`k` to select a comment, `<CR>` or a mouse click to jump to its source,
 and `q` to return to the editor while leaving the box visible. `dd` immediately
 deletes the selected comment, without a confirmation dialog.
 
@@ -224,7 +224,8 @@ Toggling the box off keeps it hidden through subsequent updates until you
 toggle or focus it again. If it closes because there are no comments left,
 adding a comment opens it again unless you previously toggled it off.
 
-Configure it with `ui.hud = { auto_open = true, width = 44, max_height = 10 }` in `setup()`.
+Configure it with `ui.hud = { auto_open = true, position = 'bottom-right', width = 44, max_height = 10 }` in `setup()`.
+Position accepts `'top-left'`, `'top-right'`, `'bottom-left'`, or `'bottom-right'`.
 The height follows the comment count up to the limit, then the list scrolls.
 
 

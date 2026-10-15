@@ -6,6 +6,7 @@ local defaults = {
   ui = {
     hud = {
       auto_open = true,
+      position = "bottom-right",
       width = 44,
       max_height = 10,
     },
