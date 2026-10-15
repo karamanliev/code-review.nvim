@@ -144,8 +144,8 @@ T["updates after add edit delete and clear without stealing focus"] = function()
   add("two", 20)
   MiniTest.expect.equality(#lines(), 2)
   state.update_comment("two", { comment = "Edited" })
-  MiniTest.expect.equality(lines()[1], " [1] hud-test.lua:10 one ")
-  MiniTest.expect.equality(lines()[2], " [2] hud-test.lua:20 Edited ")
+  MiniTest.expect.equality(lines()[1], " [2] hud-test.lua:20 Edited ")
+  MiniTest.expect.equality(lines()[2], " [1] hud-test.lua:10 one ")
   state.delete_comment("one")
   MiniTest.expect.equality(#lines(), 1)
   MiniTest.expect.equality(lines()[1], " [1] hud-test.lua:20 Edited ")
@@ -165,7 +165,7 @@ T["dd selects the next comment and last deletion returns to the editor"] = funct
   press("dd")
   MiniTest.expect.equality(state.get_comment("two"), nil)
   MiniTest.expect.equality(vim.api.nvim_win_get_cursor(window())[1], 2)
-  MiniTest.expect.equality(lines()[2], " [2] hud-test.lua:30 three ")
+  MiniTest.expect.equality(lines()[2], " [1] hud-test.lua:10 one ")
   press("dd")
   press("dd")
   MiniTest.expect.equality(window(), nil)
@@ -321,14 +321,14 @@ T["colors only the digits inside brackets including multidigit numbers"] = funct
   local marks = vim.api.nvim_buf_get_extmarks(buf, ns, 0, -1, { details = true })
   MiniTest.expect.equality(#marks, 12)
   MiniTest.expect.equality(marks[1][3], 2)
-  MiniTest.expect.equality(marks[1][4].end_col, 3)
+  MiniTest.expect.equality(marks[1][4].end_col, 4)
   MiniTest.expect.equality(marks[12][3], 2)
-  MiniTest.expect.equality(marks[12][4].end_col, 4)
+  MiniTest.expect.equality(marks[12][4].end_col, 3)
   MiniTest.expect.equality(marks[12][4].hl_group, "CodeReviewHudNumber")
   MiniTest.expect.equality(vim.api.nvim_get_hl(0, { name = "CodeReviewHudNumber" }).link, "Number")
 end
 
-T["mouse clicks jump to the clicked comment without changing mouse mappings"] = function()
+T["double clicks jump to comments while single clicks do not navigate"] = function()
   local on_key, getmousepos = vim.on_key, vim.fn.getmousepos
   local listener
   local mouse = {}
@@ -345,8 +345,12 @@ T["mouse clicks jump to the clicked comment without changing mouse mappings"] = 
     add("one", 10)
     add("two", 42)
     cr.toggle_hud()
-    local key = vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true)
-    mouse = { winid = window(), line = 2 }
+    local key = vim.api.nvim_replace_termcodes("<2-LeftMouse>", true, false, true)
+    mouse = { winid = window(), line = 1 }
+    local previous_row = vim.api.nvim_win_get_cursor(editor)[1]
+    listener(vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true))
+    vim.wait(20, function() return false end)
+    MiniTest.expect.equality(vim.api.nvim_win_get_cursor(editor)[1], previous_row)
     listener(key)
     MiniTest.expect.equality(vim.wait(100, function()
       return vim.api.nvim_get_current_win() == editor and vim.api.nvim_win_get_cursor(editor)[1] == 42
@@ -397,6 +401,89 @@ T["bottom edge stays fixed as comments are added"] = function()
   add("two", 20)
   local second = vim.api.nvim_win_get_config(window())
   MiniTest.expect.equality(second.row + second.height, first.row + first.height)
+end
+
+T["newest comments come first with descending chronological numbers"] = function()
+  add("oldest", 80)
+  add("middle", 10)
+  add("newest", 40)
+  cr.toggle_hud()
+  MiniTest.expect.equality(lines(), {
+    " [3] hud-test.lua:40 newest ",
+    " [2] hud-test.lua:10 middle ",
+    " [1] hud-test.lua:80 oldest ",
+  })
+  state.update_comment("oldest", { comment = "Edited" })
+  MiniTest.expect.equality(lines()[3], " [1] hud-test.lua:80 Edited ")
+  cr.toggle_hud()
+  cr.toggle_hud()
+  MiniTest.expect.equality(lines()[3], " [1] hud-test.lua:80 Edited ")
+end
+
+T["existing comments are ordered by creation timestamp rather than storage or code order"] = function()
+  for _, item in ipairs({
+    { id = "newest", line_start = 10, timestamp = 300 },
+    { id = "oldest", line_start = 20, timestamp = 100 },
+    { id = "middle", line_start = 30, timestamp = 200 },
+  }) do
+    item.file = vim.api.nvim_buf_get_name(source)
+    item.line_end = item.line_start
+    item.comment = item.id
+    memory.add(item)
+  end
+  cr.toggle_hud()
+  MiniTest.expect.equality(lines(), {
+    " [3] hud-test.lua:10 newest ",
+    " [2] hud-test.lua:30 middle ",
+    " [1] hud-test.lua:20 oldest ",
+  })
+end
+
+T["scrollbar appears only on overflow and its thumb follows scrolling"] = function()
+  require("code-review.config").setup({ ui = { hud = { max_height = 10 } } })
+  local function scrollbar()
+    for _, candidate in ipairs(vim.api.nvim_list_wins()) do
+      if vim.bo[vim.api.nvim_win_get_buf(candidate)].filetype == "code-review-hud-scrollbar" then
+        return candidate
+      end
+    end
+  end
+  for index = 1, 10 do
+    add(tostring(index), index)
+  end
+  cr.toggle_hud()
+  MiniTest.expect.equality(scrollbar(), nil)
+  for index = 11, 15 do
+    add(tostring(index), index)
+  end
+  cr.focus_hud()
+  MiniTest.expect.equality(vim.api.nvim_win_get_cursor(window())[1], 1)
+  local scroll = scrollbar()
+  MiniTest.expect.equality(scroll ~= nil, true)
+  local body_conf = vim.api.nvim_win_get_config(window())
+  local scroll_conf = vim.api.nvim_win_get_config(scroll)
+  MiniTest.expect.equality(scroll_conf.height, 10)
+  MiniTest.expect.equality(scroll_conf.col, body_conf.col + body_conf.width - 1)
+  MiniTest.expect.equality(scroll_conf.focusable, false)
+  MiniTest.expect.equality(lines()[1]:match("%[(%d+)%]"), "15")
+  MiniTest.expect.equality(lines()[15]:match("%[(%d+)%]"), "1")
+  local ns = vim.api.nvim_get_namespaces().CodeReviewHudScrollbar
+  local scroll_buf = vim.api.nvim_win_get_buf(scroll)
+  local marks = vim.api.nvim_buf_get_extmarks(scroll_buf, ns, 0, -1, { details = true })
+  MiniTest.expect.equality(marks[1][4].hl_group, "CodeReviewHudScrollThumb")
+  vim.api.nvim_win_call(window(), function()
+    vim.cmd("normal! Gzb")
+  end)
+  vim.api.nvim_exec_autocmds("WinScrolled", { pattern = tostring(window()) })
+  MiniTest.expect.equality(vim.wait(100, function()
+    marks = vim.api.nvim_buf_get_extmarks(scroll_buf, ns, 0, -1, { details = true })
+    return marks[10][4].hl_group == "CodeReviewHudScrollThumb"
+      and marks[1][4].hl_group == "CodeReviewHudScrollTrack"
+  end), true)
+  for index = 11, 15 do
+    state.delete_comment(tostring(index))
+  end
+  MiniTest.expect.equality(scrollbar(), nil)
 end
 
 return T

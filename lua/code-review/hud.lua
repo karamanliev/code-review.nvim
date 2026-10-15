@@ -1,6 +1,9 @@
 local M = {}
 local win, buf, editor
 local header_win, header_buf
+local scrollbar_win, scrollbar_buf
+local creation_order, next_order = {}, 0
+local scrollbar_pending = false
 local items = {}
 local refreshing = false
 local enabled = false
@@ -8,8 +11,9 @@ local open
 local bars_pending = false
 local comment_ns = vim.api.nvim_create_namespace("CodeReviewHudComments")
 local number_ns = vim.api.nvim_create_namespace("CodeReviewHudNumbers")
+local scrollbar_ns = vim.api.nvim_create_namespace("CodeReviewHudScrollbar")
 local mouse_ns = vim.api.nvim_create_namespace("CodeReviewHudMouse")
-local left_mouse = vim.api.nvim_replace_termcodes("<LeftMouse>", true, false, true)
+local double_click = vim.api.nvim_replace_termcodes("<2-LeftMouse>", true, false, true)
 
 local function visible()
   return win and vim.api.nvim_win_is_valid(win)
@@ -19,7 +23,7 @@ local function hide_bars()
   if not visible() then
     return
   end
-  for _, target in ipairs({ win, header_win }) do
+  for _, target in ipairs({ win, header_win, scrollbar_win }) do
     if vim.api.nvim_win_is_valid(target) then
       for _, option in ipairs({ "statusline", "winbar" }) do
         if vim.api.nvim_win_get_option(target, option) ~= "" then
@@ -62,9 +66,14 @@ function M.close(keep_enabled)
   end
   local target = win
   local header = header_win
+  local scrollbar = scrollbar_win
   win, buf = nil, nil
   header_win, header_buf = nil, nil
+  scrollbar_win, scrollbar_buf = nil, nil
   items = {}
+  if scrollbar and vim.api.nvim_win_is_valid(scrollbar) then
+    vim.api.nvim_win_close(scrollbar, true)
+  end
   if header and vim.api.nvim_win_is_valid(header) then
     vim.api.nvim_win_close(header, true)
   end
@@ -114,32 +123,95 @@ local function truncate(text, width)
   return vim.fn.strcharpart(text, 0, length) .. "…"
 end
 
-local function refresh()
+local function update_scrollbar()
   if not visible() then
-    if not enabled or #require("code-review.state").get_comments() == 0 then
+    return
+  end
+  local conf = vim.api.nvim_win_get_config(win)
+  if #items <= conf.height then
+    if scrollbar_win and vim.api.nvim_win_is_valid(scrollbar_win) then
+      vim.api.nvim_win_close(scrollbar_win, true)
+    end
+    scrollbar_win, scrollbar_buf = nil, nil
+    return
+  end
+  local top = vim.api.nvim_win_call(win, function()
+    return vim.fn.line("w0")
+  end)
+  local height = conf.height
+  local thumb_height = math.max(1, math.floor(height * height / #items))
+  local thumb_top = math.floor((height - thumb_height) * math.min(top - 1, #items - height) / (#items - height))
+  local scroll_conf = {
+    relative = "editor", row = conf.row, col = conf.col + conf.width - 1,
+    width = 1, height = height, style = "minimal", border = "none",
+    focusable = false, zindex = (conf.zindex or 50) + 1,
+  }
+  if not scrollbar_win or not vim.api.nvim_win_is_valid(scrollbar_win) then
+    scrollbar_buf = vim.api.nvim_create_buf(false, true)
+    vim.api.nvim_buf_set_option(scrollbar_buf, "bufhidden", "wipe")
+    vim.api.nvim_buf_set_option(scrollbar_buf, "filetype", "code-review-hud-scrollbar")
+    scrollbar_win = vim.api.nvim_open_win(scrollbar_buf, false, scroll_conf)
+    vim.api.nvim_win_set_option(scrollbar_win, "statusline", "")
+    vim.api.nvim_win_set_option(scrollbar_win, "winbar", "")
+  else
+    vim.api.nvim_win_set_config(scrollbar_win, scroll_conf)
+  end
+  vim.api.nvim_set_hl(0, "CodeReviewHudScrollTrack", { link = "PmenuSbar", default = true })
+  vim.api.nvim_set_hl(0, "CodeReviewHudScrollThumb", { link = "PmenuThumb", default = true })
+  local lines = {}
+  for index = 1, height do
+    lines[index] = " "
+  end
+  vim.api.nvim_buf_set_option(scrollbar_buf, "modifiable", true)
+  vim.api.nvim_buf_set_lines(scrollbar_buf, 0, -1, false, lines)
+  vim.api.nvim_buf_clear_namespace(scrollbar_buf, scrollbar_ns, 0, -1)
+  for index = 0, height - 1 do
+    local thumb = index >= thumb_top and index < thumb_top + thumb_height
+    vim.api.nvim_buf_add_highlight(scrollbar_buf, scrollbar_ns,
+      thumb and "CodeReviewHudScrollThumb" or "CodeReviewHudScrollTrack", index, 0, -1)
+  end
+  vim.api.nvim_buf_set_option(scrollbar_buf, "modifiable", false)
+end
+
+local function schedule_scrollbar()
+  if scrollbar_pending or not visible() then
+    return
+  end
+  scrollbar_pending = true
+  vim.schedule(function()
+    scrollbar_pending = false
+    update_scrollbar()
+  end)
+end
+
+local function refresh()
+  local comments = require("code-review.state").get_comments()
+  for _, item in ipairs(comments) do
+    if not creation_order[item.id] then
+      next_order = next_order + 1
+      creation_order[item.id] = next_order
+    end
+  end
+  if not visible() then
+    if not enabled or #comments == 0 then
       return
     end
     open()
   end
   local row = vim.api.nvim_win_get_cursor(win)[1]
   local view = vim.api.nvim_win_call(win, vim.fn.winsaveview)
+  local previous_first = items[1] and items[1].id
+  local follow_newest = vim.api.nvim_get_current_win() ~= win and view.topline == 1
   local selected = items[row] and items[row].id
-  local comments = require("code-review.state").get_comments()
   if #comments == 0 then
     M.close(true)
     return
   end
   table.sort(comments, function(a, b)
-    if a.file ~= b.file then
-      return a.file < b.file
-    end
-    if a.line_start ~= b.line_start then
-      return a.line_start < b.line_start
-    end
     if (a.timestamp or 0) ~= (b.timestamp or 0) then
-      return (a.timestamp or 0) < (b.timestamp or 0)
+      return (a.timestamp or 0) > (b.timestamp or 0)
     end
-    return (a.id or "") < (b.id or "")
+    return creation_order[a.id] > creation_order[b.id]
   end)
   items = comments
   local conf = geometry(#items)
@@ -148,7 +220,7 @@ local function refresh()
   for index, item in ipairs(items) do
     local prefix = string.format(
       " [%d] %s:%d ",
-      index,
+      #items - index + 1,
       vim.fn.fnamemodify(item.file, ":t"),
       item.line_start
     )
@@ -158,6 +230,10 @@ local function refresh()
     if selected and item.id == selected then
       row = index
     end
+  end
+  if follow_newest and previous_first ~= items[1].id then
+    row = 1
+    view.topline, view.lnum = 1, 1
   end
   vim.api.nvim_buf_set_option(buf, "modifiable", true)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
@@ -197,6 +273,7 @@ local function refresh()
     vim.fn.winrestview(view)
   end)
   vim.api.nvim_win_set_cursor(win, { math.min(row, #items), 0 })
+  update_scrollbar()
 end
 
 function M.refresh()
@@ -248,7 +325,7 @@ open = function()
   vim.keymap.set("n", "q", M.leave, { buffer = buf, desc = "Return to editor" })
   vim.keymap.set("n", "<CR>", jump, { buffer = buf, desc = "Jump to comment source" })
   vim.on_key(function(key)
-    if key ~= left_mouse or not visible() then
+    if key ~= double_click or not visible() then
       return
     end
     local previous = vim.api.nvim_get_current_win()
@@ -299,6 +376,7 @@ function M.focus()
 end
 
 function M.setup()
+  creation_order, next_order = {}, 0
   enabled = require("code-review.config").get("ui.hud.auto_open") == true
   local group = vim.api.nvim_create_augroup("CodeReviewHud", { clear = true })
   vim.api.nvim_create_autocmd("WinClosed", {
@@ -312,6 +390,10 @@ function M.setup()
   vim.api.nvim_create_autocmd("VimResized", {
     group = group,
     callback = M.refresh,
+  })
+  vim.api.nvim_create_autocmd({ "WinScrolled", "CursorMoved" }, {
+    group = group,
+    callback = schedule_scrollbar,
   })
   vim.api.nvim_create_autocmd({ "WinEnter", "WinLeave", "BufEnter", "BufLeave" }, {
     group = group,

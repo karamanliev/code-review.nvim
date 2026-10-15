@@ -210,9 +210,10 @@ require('code-review').setup({
 `<leader>rt` toggles a compact floating box in the bottom-right corner without leaving the
 editor. `<leader>rf` opens and focuses it. It updates after comment changes,
 shows the total count, and lists each comment (including replies) on one
-truncated line, sorted by file and line.
+truncated line, newest first. Numbers descend from the newest comment to `[1]`
+for the oldest. Editing a comment does not change its position.
 
-Inside the box, use `j`/`k` to select a comment, `<CR>` or a mouse click to jump to its source,
+Inside the box, use `j`/`k` to select a comment, `<CR>` or a mouse double-click to jump to its source,
 and `q` to return to the editor while leaving the box visible. `dd` immediately
 deletes the selected comment, without a confirmation dialog.
 
@@ -226,7 +227,8 @@ adding a comment opens it again unless you previously toggled it off.
 
 Configure it with `ui.hud = { auto_open = true, position = 'bottom-right', width = 44, max_height = 10 }` in `setup()`.
 Position accepts `'top-left'`, `'top-right'`, `'bottom-left'`, or `'bottom-right'`.
-The height follows the comment count up to the limit, then the list scrolls.
+The height follows the comment count up to the limit, then the list scrolls
+with a scrollbar showing the current position and remaining comments.
 
 
 <details>
