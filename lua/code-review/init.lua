@@ -27,6 +27,10 @@ function M.setup(opts)
     M.clear()
   end, { desc = "Clear all review comments" })
 
+  vim.api.nvim_create_user_command("CodeReviewClearComment", function()
+    M.clear_comment_at_cursor()
+  end, { desc = "Clear nearest review comment" })
+
   vim.api.nvim_create_user_command("CodeReviewComment", function(args)
     local context_lines = tonumber(args.args)
     M.add_comment(context_lines)
@@ -115,6 +119,7 @@ function M.setup(opts)
         if key then
           local desc = {
             clear = "Clear review comments",
+            clear_comment = "Clear nearest review comment",
             toggle_hud = "Toggle comments box",
             focus_hud = "Focus comments box",
             add_comment = "Add review comment",
@@ -133,6 +138,7 @@ function M.setup(opts)
 
           local func = {
             clear = M.clear,
+            clear_comment = M.clear_comment_at_cursor,
             toggle_hud = M.toggle_hud,
             focus_hud = M.focus_hud,
             add_comment = function()
@@ -251,7 +257,7 @@ function M.copy()
   vim.notify("Code reviews copied to clipboard")
 end
 
-function M.copy_comment_at_cursor()
+local function with_nearest_comment(action, callback)
   local file = utils.normalize_path(vim.api.nvim_buf_get_name(0))
   local row = vim.api.nvim_win_get_cursor(0)[1]
   local nearest = {}
@@ -270,22 +276,17 @@ function M.copy_comment_at_cursor()
   end
 
   if #nearest == 0 then
-    vim.notify("No comments in current file to copy", vim.log.levels.WARN)
+    vim.notify("No comments in current file to " .. action, vim.log.levels.WARN)
     return
   end
 
-  local function copy(item)
-    vim.fn.setreg("+", formatter.format({ item }))
-    vim.notify("Comment copied to clipboard")
-  end
-
   if #nearest == 1 then
-    copy(nearest[1])
+    callback(nearest[1])
     return
   end
 
   vim.ui.select(nearest, {
-    prompt = "Select comment to copy:",
+    prompt = "Select comment to " .. action .. ":",
     format_item = function(item)
       local first_line = item.comment:match("^[^\n]*") or item.comment
       if #first_line > 50 then
@@ -295,7 +296,22 @@ function M.copy_comment_at_cursor()
     end,
   }, function(choice)
     if choice then
-      copy(choice)
+      callback(choice)
+    end
+  end)
+end
+
+function M.copy_comment_at_cursor()
+  with_nearest_comment("copy", function(item)
+    vim.fn.setreg("+", formatter.format({ item }))
+    vim.notify("Comment copied to clipboard")
+  end)
+end
+
+function M.clear_comment_at_cursor()
+  with_nearest_comment("clear", function(item)
+    if state.delete_comment(item.id) then
+      vim.notify("Comment cleared")
     end
   end)
 end

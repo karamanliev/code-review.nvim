@@ -106,6 +106,10 @@ local defaults = {
     -- Clear all comments
     clear = {
       mode = "n",
+      key = "<leader>rX",
+    },
+    clear_comment = {
+      mode = "n",
       key = "<leader>rx",
     },
     -- Add comment at cursor/selection

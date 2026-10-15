@@ -178,7 +178,8 @@ require('code-review').setup({
   keymaps = {
     toggle_hud = '<leader>rt',
     focus_hud = '<leader>rf',
-    clear = '<leader>rx',
+    clear = '<leader>rX',
+    clear_comment = '<leader>rx',
     add_comment = '<leader>ra',
     preview = '<leader>rp',
     save = '<leader>rw',
@@ -255,7 +256,8 @@ vim.keymap.set('n', '<leader>ry', cr.copy_comment_at_cursor, { desc = "Copy near
 vim.keymap.set('n', '<leader>rs', cr.show_comment_at_cursor, { desc = "Show comment at cursor" })
 vim.keymap.set('n', '<leader>rl', cr.list_comments, { desc = "List all comments (configured picker)" })
 vim.keymap.set('n', '<leader>rq', cr.list_quickfix, { desc = "List all comments in quickfix" })
-vim.keymap.set('n', '<leader>rx', cr.clear, { desc = "Clear all comments" })
+vim.keymap.set('n', '<leader>rX', cr.clear, { desc = "Clear all comments" })
+vim.keymap.set('n', '<leader>rx', cr.clear_comment_at_cursor, { desc = "Clear nearest comment" })
 ```
 
 ### Buffer-Specific Keymaps
@@ -343,7 +345,8 @@ end
 | `:CodeReviewCopyComment`     | `<leader>ry`   | Copy comment under cursor, or nearest in current file        |
 | `:CodeReviewToggleHud`       | `<leader>rt`   | Toggle the live comments box                                 |
 | `:CodeReviewFocusHud`        | `<leader>rf`   | Open and focus the live comments box                         |
-| `:CodeReviewClear`           | `<leader>rx`   | Clear all review comments                                   |
+| `:CodeReviewClear`           | `<leader>rX`   | Clear all review comments                                   |
+| `:CodeReviewClearComment`    | `<leader>rx`   | Immediately clear comment under cursor, or nearest in file   |
 | `:CodeReviewDeleteComment`   | `<leader>rd`   | Delete comment at cursor position                           |
 | `:CodeReviewEditComment`     | `<leader>re`   | Edit comment at cursor position                             |
 | `:CodeReviewResolveThread`   | -              | Mark current thread as resolved                             |
@@ -371,6 +374,7 @@ end
 | `require('code-review').toggle_hud()`               | Toggle live comments box                |
 | `require('code-review').focus_hud()`                | Open and focus live comments box        |
 | `require('code-review').clear()`                    | Clear all comments                      |
+| `require('code-review').clear_comment_at_cursor()`  | Immediately clear nearest comment       |
 | `require('code-review').delete_comment_at_cursor()` | Delete comment at cursor                |
 | `require('code-review').edit_comment_at_cursor()`   | Edit comment at cursor                  |
 

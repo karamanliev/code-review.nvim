@@ -3,6 +3,7 @@ local state = require("code-review.state")
 local formatter = require("code-review.formatter")
 local original = {}
 local comments, copied, notifications, selected
+local deleted, cleared
 local bufnr
 
 local T = MiniTest.new_set({ hooks = {
@@ -11,6 +12,16 @@ local T = MiniTest.new_set({ hooks = {
     original.setreg = vim.fn.setreg
     original.notify = vim.notify
     original.select = vim.ui.select
+    original.delete_comment = state.delete_comment
+    original.clear = state.clear
+    deleted, cleared = {}, false
+    state.delete_comment = function(id)
+      table.insert(deleted, id)
+      return true
+    end
+    state.clear = function()
+      cleared = true
+    end
     comments, copied, notifications, selected = {}, {}, {}, nil
     state.get_comments = function()
       return comments
@@ -33,6 +44,8 @@ local T = MiniTest.new_set({ hooks = {
   post_case = function()
     require("code-review.hud").close()
     state.get_comments = original.get_comments
+    state.delete_comment = original.delete_comment
+    state.clear = original.clear
     vim.fn.setreg = original.setreg
     vim.notify = original.notify
     vim.ui.select = original.select
@@ -128,6 +141,57 @@ T["default mappings and command dispatch to the copy actions"] = function()
   comments = { item(20, 20) }
   vim.cmd("CodeReviewCopyComment")
   expect_copied(comments[1])
+end
+
+T["clear removes only the nearest comment in the current file"] = function()
+  comments = { item(20, 20, "Other file", "other.lua"), item(18, 22, "Target"), item(24, 24, "Later") }
+  for index, comment in ipairs(comments) do
+    comment.id = tostring(index)
+  end
+  cr.clear_comment_at_cursor()
+  MiniTest.expect.equality(deleted, { "2" })
+  MiniTest.expect.equality(cleared, false)
+  MiniTest.expect.equality(#copied, 0)
+end
+
+T["clear uses nearest range boundary when cursor is not on a comment"] = function()
+  comments = { item(1, 18), item(23, 24) }
+  comments[1].id, comments[2].id = "above", "below"
+  cr.clear_comment_at_cursor()
+  MiniTest.expect.equality(deleted, { "above" })
+end
+
+T["clear asks which comment when nearest distances tie and allows cancellation"] = function()
+  comments = { item(18, 18), item(22, 22) }
+  comments[1].id, comments[2].id = "above", "below"
+  cr.clear_comment_at_cursor()
+  MiniTest.expect.equality(selected.items, comments)
+  MiniTest.expect.equality(selected.opts.prompt, "Select comment to clear:")
+  selected.callback(nil)
+  MiniTest.expect.equality(deleted, {})
+  selected.callback(comments[2])
+  MiniTest.expect.equality(deleted, { "below" })
+end
+
+T["clear warns without deleting when the current file has no comments"] = function()
+  comments = { item(20, 20, "Other file", "other.lua") }
+  cr.clear_comment_at_cursor()
+  MiniTest.expect.equality(deleted, {})
+  MiniTest.expect.equality(cleared, false)
+  MiniTest.expect.equality(notifications[1].level, vim.log.levels.WARN)
+end
+
+T["clear keymaps and commands distinguish nearest from all comments"] = function()
+  cr.setup({})
+  MiniTest.expect.equality(vim.fn.maparg("<leader>rx", "n", false, true).callback, cr.clear_comment_at_cursor)
+  MiniTest.expect.equality(vim.fn.maparg("<leader>rX", "n", false, true).callback, cr.clear)
+  comments = { item(20, 20) }
+  comments[1].id = "target"
+  vim.cmd("CodeReviewClearComment")
+  MiniTest.expect.equality(deleted, { "target" })
+  MiniTest.expect.equality(cleared, false)
+  vim.cmd("CodeReviewClear")
+  MiniTest.expect.equality(cleared, true)
 end
 
 return T
