@@ -47,6 +47,10 @@ function M.setup(opts)
     M.copy()
   end, { desc = "Copy review to clipboard" })
 
+  vim.api.nvim_create_user_command("CodeReviewCopyComment", function()
+    M.copy_comment_at_cursor()
+  end, { desc = "Copy nearest comment to clipboard" })
+
   vim.api.nvim_create_user_command("CodeReviewShowComment", function()
     M.show_comment_at_cursor()
   end, { desc = "Show comment at cursor position" })
@@ -111,6 +115,7 @@ function M.setup(opts)
             preview = "Preview review",
             save = "Save review to file",
             copy = "Copy review to clipboard",
+            copy_comment = "Copy nearest comment to clipboard",
             show_comment = "Show comment at cursor",
             list_comments = "List all comments",
             quickfix = "List all comments in quickfix",
@@ -128,6 +133,7 @@ function M.setup(opts)
             preview = M.preview,
             save = M.save,
             copy = M.copy,
+            copy_comment = M.copy_comment_at_cursor,
             show_comment = M.show_comment_at_cursor,
             list_comments = M.list_comments,
             quickfix = M.list_quickfix,
@@ -227,6 +233,55 @@ function M.copy()
   local content = formatter.format(comments)
   vim.fn.setreg("+", content)
   vim.notify("Code reviews copied to clipboard")
+end
+
+function M.copy_comment_at_cursor()
+  local file = utils.normalize_path(vim.api.nvim_buf_get_name(0))
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local nearest = {}
+  local min_distance = math.huge
+
+  for _, item in ipairs(state.get_comments()) do
+    if utils.normalize_path(item.file) == file then
+      local distance = math.max(item.line_start - row, row - item.line_end, 0)
+      if distance < min_distance then
+        nearest = { item }
+        min_distance = distance
+      elseif distance == min_distance then
+        table.insert(nearest, item)
+      end
+    end
+  end
+
+  if #nearest == 0 then
+    vim.notify("No comments in current file to copy", vim.log.levels.WARN)
+    return
+  end
+
+  local function copy(item)
+    vim.fn.setreg("+", formatter.format({ item }))
+    vim.notify("Comment copied to clipboard")
+  end
+
+  if #nearest == 1 then
+    copy(nearest[1])
+    return
+  end
+
+  vim.ui.select(nearest, {
+    prompt = "Select comment to copy:",
+    format_item = function(item)
+      local first_line = item.comment:match("^[^\n]*") or item.comment
+      if #first_line > 50 then
+        first_line = first_line:sub(1, 47) .. "..."
+      end
+      return string.format("Line %d-%d: %s", item.line_start, item.line_end, first_line)
+    end,
+  }, function(choice)
+    if choice then
+      copy(choice)
+    end
+  end)
 end
 
 --- Show comment at cursor position

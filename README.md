@@ -87,7 +87,7 @@ use {
 
 2. **Preview all comments**: `<leader>rp` to see your complete review
 
-3. **Copy to clipboard**: `<leader>ry` to copy everything
+3. **Copy to clipboard**: `<leader>ry` to copy the nearest comment in the current file, or `<leader>rY` to copy everything
 
 4. **Paste to AI**: Just paste in Claude, ChatGPT, or any AI assistant
 
@@ -180,7 +180,8 @@ require('code-review').setup({
     add_comment = '<leader>ra',
     preview = '<leader>rp',
     save = '<leader>rw',
-    copy = '<leader>ry',
+    copy = '<leader>rY',
+    copy_comment = '<leader>ry',
     show_comment = '<leader>rs',
     list_comments = '<leader>rl',
     quickfix = '<leader>rq',
@@ -219,7 +220,8 @@ local cr = require('code-review')
 vim.keymap.set({'n', 'v'}, '<leader>ra', cr.add_comment, { desc = "Add review comment" })
 vim.keymap.set('n', '<leader>rp', cr.preview, { desc = "Preview review" })
 vim.keymap.set('n', '<leader>rw', cr.save, { desc = "Save review to file" })
-vim.keymap.set('n', '<leader>ry', cr.copy, { desc = "Copy review to clipboard" })
+vim.keymap.set('n', '<leader>rY', cr.copy, { desc = "Copy review to clipboard" })
+vim.keymap.set('n', '<leader>ry', cr.copy_comment_at_cursor, { desc = "Copy nearest comment to clipboard" })
 vim.keymap.set('n', '<leader>rs', cr.show_comment_at_cursor, { desc = "Show comment at cursor" })
 vim.keymap.set('n', '<leader>rl', cr.list_comments, { desc = "List all comments (configured picker)" })
 vim.keymap.set('n', '<leader>rq', cr.list_quickfix, { desc = "List all comments in quickfix" })
@@ -307,7 +309,8 @@ end
 | `:CodeReviewQuickfix`        | `<leader>rq`   | List all comments in the native quickfix window (always)    |
 | `:CodeReviewPreview`         | `<leader>rp`   | Open preview window with editable content                   |
 | `:CodeReviewSave [path]`     | `<leader>rw`   | Save review to file                                         |
-| `:CodeReviewCopy`            | `<leader>ry`   | Copy review to clipboard                                    |
+| `:CodeReviewCopy`            | `<leader>rY`   | Copy review to clipboard                                    |
+| `:CodeReviewCopyComment`     | `<leader>ry`   | Copy comment under cursor, or nearest in current file        |
 | `:CodeReviewClear`           | `<leader>rx`   | Clear all review comments                                   |
 | `:CodeReviewDeleteComment`   | `<leader>rd`   | Delete comment at cursor position                           |
 | `:CodeReviewEditComment`     | `<leader>re`   | Edit comment at cursor position                             |
@@ -332,6 +335,7 @@ end
 | `require('code-review').preview()`                  | Open preview window                     |
 | `require('code-review').save(path)`                 | Save to file                            |
 | `require('code-review').copy()`                     | Copy to clipboard                       |
+| `require('code-review').copy_comment_at_cursor()`   | Copy nearest comment in current file    |
 | `require('code-review').clear()`                    | Clear all comments                      |
 | `require('code-review').delete_comment_at_cursor()` | Delete comment at cursor                |
 | `require('code-review').edit_comment_at_cursor()`   | Edit comment at cursor                  |

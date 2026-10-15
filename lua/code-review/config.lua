@@ -112,6 +112,10 @@ local defaults = {
     -- Copy review to clipboard
     copy = {
       mode = "n",
+      key = "<leader>rY",
+    },
+    copy_comment = {
+      mode = "n",
       key = "<leader>ry",
     },
     -- Show comment at cursor
