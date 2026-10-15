@@ -31,6 +31,7 @@ local T = MiniTest.new_set({ hooks = {
     vim.api.nvim_win_set_cursor(0, { 20, 0 })
   end,
   post_case = function()
+    require("code-review.hud").close()
     state.get_comments = original.get_comments
     vim.fn.setreg = original.setreg
     vim.notify = original.notify

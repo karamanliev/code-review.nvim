@@ -40,6 +40,7 @@ end
 function M.refresh_ui()
   -- Update visual indicators (signs and virtual text)
   require("code-review.comment").update_indicators()
+  require("code-review.hud").refresh()
 
   -- Future: Update other UI elements like statusline, floating windows, etc.
 end

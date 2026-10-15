@@ -4,6 +4,11 @@ local M = {}
 local defaults = {
   -- UI settings
   ui = {
+    hud = {
+      auto_open = true,
+      width = 44,
+      max_height = 10,
+    },
     -- Floating window settings for comment input
     input_window = {
       width = 80,
@@ -89,6 +94,14 @@ local defaults = {
   },
   -- Keymaps (set to false to disable all keymaps)
   keymaps = {
+    toggle_hud = {
+      mode = "n",
+      key = "<leader>rt",
+    },
+    focus_hud = {
+      mode = "n",
+      key = "<leader>rf",
+    },
     -- Clear all comments
     clear = {
       mode = "n",

@@ -12,6 +12,10 @@ local utils = require("code-review.utils")
 function M.setup(opts)
   config.setup(opts or {})
   state.init()
+  require("code-review.hud").setup()
+
+  vim.api.nvim_create_user_command("CodeReviewToggleHud", M.toggle_hud, { desc = "Toggle comments box" })
+  vim.api.nvim_create_user_command("CodeReviewFocusHud", M.focus_hud, { desc = "Focus comments box" })
 
   -- Define highlight groups for different statuses
   vim.api.nvim_set_hl(0, "CodeReviewWaitingReview", { fg = "#50fa7b", default = true }) -- Green (informative)
@@ -111,6 +115,8 @@ function M.setup(opts)
         if key then
           local desc = {
             clear = "Clear review comments",
+            toggle_hud = "Toggle comments box",
+            focus_hud = "Focus comments box",
             add_comment = "Add review comment",
             preview = "Preview review",
             save = "Save review to file",
@@ -127,6 +133,8 @@ function M.setup(opts)
 
           local func = {
             clear = M.clear,
+            toggle_hud = M.toggle_hud,
+            focus_hud = M.focus_hud,
             add_comment = function()
               M.add_comment(vim.v.count > 0 and vim.v.count or nil)
             end,
@@ -165,6 +173,14 @@ function M.setup(opts)
 end
 
 --- Clear all comments
+function M.toggle_hud()
+  require("code-review.hud").toggle()
+end
+
+function M.focus_hud()
+  require("code-review.hud").focus()
+end
+
 function M.clear()
   state.clear()
 end

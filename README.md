@@ -176,6 +176,8 @@ require('code-review').setup({
   },
   -- Keymaps (set to false to disable all keymaps)
   keymaps = {
+    toggle_hud = '<leader>rt',
+    focus_hud = '<leader>rf',
     clear = '<leader>rx',
     add_comment = '<leader>ra',
     preview = '<leader>rp',
@@ -202,6 +204,29 @@ require('code-review').setup({
 </details>
 
 ## 🔧 Advanced Configuration
+
+### Live Comments Box
+
+`<leader>rt` toggles a compact floating box on the right without leaving the
+editor. `<leader>rf` opens and focuses it. It updates after comment changes,
+shows the total count, and lists each comment (including replies) on one
+truncated line, sorted by file and line.
+
+Inside the box, use `j`/`k` to select a comment, `<CR>` to jump to its source,
+and `q` to return to the editor while leaving the box visible. `dd` immediately
+deletes the selected comment, without a confirmation dialog.
+
+With no comments, opening the box only prints `No comments to display` in the
+command area. Deleting or clearing the last comment closes it automatically.
+By default, the box opens automatically when comments exist, including when
+the first comment is added. Set `ui.hud.auto_open = false` to disable this.
+Toggling the box off keeps it hidden through subsequent updates until you
+toggle or focus it again. If it closes because there are no comments left,
+adding a comment opens it again unless you previously toggled it off.
+
+Configure it with `ui.hud = { auto_open = true, width = 44, max_height = 10 }` in `setup()`.
+The height follows the comment count up to the limit, then the list scrolls.
+
 
 <details>
 <summary>Custom Keymaps and Autocmds</summary>
@@ -311,6 +336,8 @@ end
 | `:CodeReviewSave [path]`     | `<leader>rw`   | Save review to file                                         |
 | `:CodeReviewCopy`            | `<leader>rY`   | Copy review to clipboard                                    |
 | `:CodeReviewCopyComment`     | `<leader>ry`   | Copy comment under cursor, or nearest in current file        |
+| `:CodeReviewToggleHud`       | `<leader>rt`   | Toggle the live comments box                                 |
+| `:CodeReviewFocusHud`        | `<leader>rf`   | Open and focus the live comments box                         |
 | `:CodeReviewClear`           | `<leader>rx`   | Clear all review comments                                   |
 | `:CodeReviewDeleteComment`   | `<leader>rd`   | Delete comment at cursor position                           |
 | `:CodeReviewEditComment`     | `<leader>re`   | Edit comment at cursor position                             |
@@ -336,6 +363,8 @@ end
 | `require('code-review').save(path)`                 | Save to file                            |
 | `require('code-review').copy()`                     | Copy to clipboard                       |
 | `require('code-review').copy_comment_at_cursor()`   | Copy nearest comment in current file    |
+| `require('code-review').toggle_hud()`               | Toggle live comments box                |
+| `require('code-review').focus_hud()`                | Open and focus live comments box        |
 | `require('code-review').clear()`                    | Clear all comments                      |
 | `require('code-review').delete_comment_at_cursor()` | Delete comment at cursor                |
 | `require('code-review').edit_comment_at_cursor()`   | Edit comment at cursor                  |
