@@ -324,6 +324,16 @@ open = function()
   vim.api.nvim_win_set_option(win, "scrolloff", 0)
   vim.keymap.set("n", "q", M.leave, { buffer = buf, desc = "Return to editor" })
   vim.keymap.set("n", "<CR>", jump, { buffer = buf, desc = "Jump to comment source" })
+  for number = 1, 10 do
+    local target = number
+    vim.keymap.set("n", tostring(target % 10), function()
+      if visible() and target <= #items then
+        vim.api.nvim_win_set_cursor(win, { #items - target + 1, 0 })
+        schedule_scrollbar()
+        jump()
+      end
+    end, { buffer = buf, desc = "Jump to comment [" .. target .. "]" })
+  end
   vim.on_key(function(key)
     if key ~= double_click or not visible() then
       return

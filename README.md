@@ -213,8 +213,10 @@ shows the total count, and lists each comment (including replies) on one
 truncated line, newest first. Numbers descend from the newest comment to `[1]`
 for the oldest. Editing a comment does not change its position.
 
-Inside the box, use `j`/`k` to select a comment, `<CR>` or a mouse double-click to jump to its source,
-and `q` to return to the editor while leaving the box visible. `dd` immediately
+Inside the box, use `j`/`k` to select a comment. Press `1` through `9` to jump
+directly to the matching numbered comment's source, or `0` for comment `[10]`.
+Use `<CR>` or a mouse double-click to jump to its source, and `q` to return to
+the editor while leaving the box visible. `dd` immediately
 deletes the selected comment, without a confirmation dialog.
 
 With no comments, opening the box only prints `No comments to display` in the

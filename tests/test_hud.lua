@@ -486,4 +486,32 @@ T["scrollbar appears only on overflow and its thumb follows scrolling"] = functi
   MiniTest.expect.equality(scrollbar(), nil)
 end
 
+T["number keys jump directly to matching comment sources"] = function()
+  for index = 1, 15 do
+    add(tostring(index), index)
+  end
+  cr.focus_hud()
+  for number = 1, 10 do
+    cr.focus_hud()
+    press(tostring(number % 10))
+    local row = vim.api.nvim_win_get_cursor(window())[1]
+    MiniTest.expect.equality(row, 16 - number)
+    MiniTest.expect.equality(lines()[row]:match("%[(%d+)%]"), tostring(number))
+    MiniTest.expect.equality(vim.api.nvim_get_current_win(), editor)
+    MiniTest.expect.equality(vim.api.nvim_win_get_cursor(editor)[1], number)
+  end
+end
+
+T["number keys ignore missing comments and are buffer local"] = function()
+  add("one", 10)
+  cr.focus_hud()
+  press("9")
+  press("0")
+  MiniTest.expect.equality(vim.api.nvim_win_get_cursor(window())[1], 1)
+  MiniTest.expect.equality(vim.api.nvim_get_current_win(), window())
+  press("q")
+  local mapping = vim.fn.maparg("1", "n", false, true)
+  MiniTest.expect.equality(mapping.desc == "Jump to comment [1]", false)
+end
+
 return T
